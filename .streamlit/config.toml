@@ -1,0 +1,21 @@
+[server]
+address = "0.0.0.0"
+port = 8501
+headless = true
+runOnSave = false
+fileWatcherType = "poll"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+showErrorDetails = "none"
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#DCBF73"
+backgroundColor = "#07110F"
+secondaryBackgroundColor = "#0D1C18"
+textColor = "#F7F1DF"
+font = "sans-serif"
