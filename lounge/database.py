@@ -13,11 +13,13 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    select,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from .config import RuntimeConfig, load_config
+from .security import is_display_code, new_display_code
 
 DB_WRITE_LOCK = RLock()
 
@@ -135,4 +137,10 @@ def create_db(config: RuntimeConfig | None = None) -> tuple[Engine, sessionmaker
         for key, value in DEFAULT_SETTINGS.items():
             if session.get(AppSetting, key) is None:
                 session.add(AppSetting(key=key, value=value))
+        participants = session.scalars(select(Participant).order_by(Participant.id)).all()
+        used_codes = {row.display_code for row in participants if is_display_code(row.display_code)}
+        for participant in participants:
+            if not is_display_code(participant.display_code):
+                participant.display_code = new_display_code(used_codes)
+                used_codes.add(participant.display_code)
     return engine, factory

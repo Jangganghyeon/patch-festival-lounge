@@ -4,6 +4,7 @@ import csv
 import hmac
 import io
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -45,6 +46,15 @@ class CheckInResult:
     participant_id: int
     display_code: str
     starting_points: int
+
+
+@dataclass(frozen=True)
+class QuickPointResult:
+    participant_id: int
+    display_code: str
+    name: str
+    delta: int
+    balance: int
 
 
 class LoungeService:
@@ -189,9 +199,8 @@ class LoungeService:
             if active_duplicate:
                 raise ValueError("이미 입장 처리된 전화번호입니다. 운영자에게 문의해 주세요.")
 
-            code = new_display_code()
-            while session.scalar(select(Participant.id).where(Participant.display_code == code)):
-                code = new_display_code()
+            used_codes = set(session.scalars(select(Participant.display_code)).all())
+            code = new_display_code(used_codes)
             participant = Participant(
                 display_code=code,
                 name=name,
@@ -331,6 +340,31 @@ class LoungeService:
             )
             return participant.current_points
 
+    def quick_adjust_points(self, command: str, operator: str) -> QuickPointResult:
+        match = re.fullmatch(r"\s*([A-Za-z]{2})\s*([+-]?\d{1,6})\s*", command or "")
+        if not match:
+            raise ValueError("RT70 형식으로 입력해 주세요. 차감 정정은 RT-20처럼 입력합니다.")
+        code = match.group(1).upper()
+        delta = int(match.group(2))
+        with self.sessions() as session:
+            participant = session.scalar(
+                select(Participant).where(
+                    and_(Participant.display_code == code, Participant.status == "active")
+                )
+            )
+            if not participant:
+                raise ValueError(f"현재 입장 중인 {code} 참가자를 찾을 수 없습니다.")
+            participant_id = participant.id
+            participant_name = participant.name
+        balance = self.adjust_points(
+            participant_id,
+            delta,
+            "빠른 활동 포인트 기록",
+            command.strip().upper(),
+            operator,
+        )
+        return QuickPointResult(participant_id, code, participant_name, delta, balance)
+
     def check_out(
         self,
         participant_id: int,
@@ -429,7 +463,7 @@ class LoungeService:
     def _public_participant(self, row: Participant) -> dict[str, Any]:
         return {
             "name": self._public_name(row),
-            "code": row.display_code[:3] + "***",
+            "code": row.display_code,
             "category": row.category,
             "status": row.status,
             "points": row.current_points,

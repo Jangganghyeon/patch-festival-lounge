@@ -9,6 +9,8 @@ import secrets
 from cryptography.fernet import Fernet, InvalidToken
 
 PHONE_PATTERN = re.compile(r"\D+")
+DISPLAY_CODE_PATTERN = re.compile(r"^[A-Z]{2}$")
+DISPLAY_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def normalize_phone(value: str) -> str:
@@ -81,6 +83,18 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
 
 
-def new_display_code() -> str:
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    return "".join(secrets.choice(alphabet) for _ in range(6))
+def is_display_code(value: str) -> bool:
+    return bool(DISPLAY_CODE_PATTERN.fullmatch(value or ""))
+
+
+def new_display_code(excluded: set[str] | None = None) -> str:
+    used = {value.upper() for value in (excluded or set())}
+    available = [
+        first + second
+        for first in DISPLAY_CODE_ALPHABET
+        for second in DISPLAY_CODE_ALPHABET
+        if first + second not in used
+    ]
+    if not available:
+        raise ValueError("사용 가능한 두 글자 참가자 ID 676개가 모두 배정되었습니다.")
+    return secrets.choice(available)

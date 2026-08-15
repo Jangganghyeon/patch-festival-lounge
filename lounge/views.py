@@ -5,8 +5,8 @@ import time
 from datetime import datetime
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 from .config import get_setting
 from .service import LoungeService
@@ -111,13 +111,13 @@ def render_kiosk(service: LoungeService) -> None:
               <div class="ticket-label">ADMISSION COMPLETE · 입장 완료</div>
               <div style="margin:.8rem 0 1.3rem;color:#f7f1df;font-size:1.35rem;font-weight:800">환영합니다, {esc(ticket["name"])}님</div>
               <div class="ticket-code">{esc(ticket["code"])}</div>
-              <div style="color:#a5b6ae;margin-top:.7rem">입장 코드 · 시작 포인트 {ticket["points"]:,} P</div>
+              <div style="color:#a5b6ae;margin-top:.7rem">나의 참가자 ID · 시작 포인트 {ticket["points"]:,} P</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
         st.info(
-            "입장 코드를 기억하거나 화면을 촬영해 주세요. 퇴장 시 이름이나 전화번호 뒤 4자리로도 검색할 수 있습니다."
+            "두 글자 ID를 기억해 주세요. 활동 포인트를 받을 때 운영진에게 이 ID를 말하면 됩니다."
         )
         if st.button("다음 방문자 등록", type="primary", use_container_width=True):
             del st.session_state["last_ticket"]
@@ -178,68 +178,59 @@ def leaderboard_html(rows: list[dict]) -> str:
         return "<div class='panel-card' style='color:#a5b6ae'>아직 순위 데이터가 없습니다.</div>"
     body = []
     for index, row in enumerate(rows, 1):
-        badge = "VIP" if row["category"] == "vip" else "GENERAL"
         body.append(
-            f"""
-            <div class="rank-row">
-              <div class="rank-number">{index:02d}</div>
-              <div><div class="rank-name">{esc(row["name"])}</div><div class="rank-code">{esc(row["code"])} · {badge}</div></div>
-              <div class="rank-points">{row["points"]:,} P</div>
-            </div>
-            """
+            f'<div class="rank-row"><div class="rank-number">{index:02d}</div>'
+            f'<div><div class="rank-name">{esc(row["name"])}</div>'
+            f'<div class="rank-code">ID&nbsp; {esc(row["code"])}</div></div>'
+            f'<div class="rank-points">{row["points"]:,} P</div></div>'
         )
     return "<div class='panel-card'>" + "".join(body) + "</div>"
+
+
+def podium_html(rows: list[dict]) -> str:
+    ranked = {place: rows[place - 1] if len(rows) >= place else None for place in (1, 2, 3)}
+
+    def podium_place(place: int) -> str:
+        row = ranked[place]
+        if row:
+            name = esc(row["name"])
+            code = esc(row["code"])
+            points = f'{row["points"]:,} P'
+        else:
+            name, code, points = "도전자 대기", "--", "0 P"
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}[place]
+        return (
+            f'<div class="podium-place podium-{place}">'
+            f'<div class="podium-medal">{medal}</div>'
+            f'<div class="podium-name">{name}</div>'
+            f'<div class="podium-id">ID&nbsp; {code}</div>'
+            f'<div class="podium-points">{points}</div>'
+            f'<div class="podium-step"><span>{place}</span></div></div>'
+        )
+
+    return (
+        '<div class="podium-shell"><div class="podium-title">TOP 3 · LIVE RANKING</div>'
+        '<div class="podium-grid">'
+        + podium_place(2)
+        + podium_place(1)
+        + podium_place(3)
+        + "</div></div>"
+    )
 
 
 def render_board(service: LoungeService) -> None:
     top_brand(service, "LIVE OPERATIONS BOARD")
     st.markdown(
-        "<div style='color:#a5b6ae'><span class='live-dot'></span>5초마다 자동 갱신</div>",
+        "<div style='color:#a5b6ae'><span class='live-dot'></span>2초마다 자동 갱신</div>",
         unsafe_allow_html=True,
     )
 
-    @st.fragment(run_every="5s")
+    @st.fragment(run_every="2s")
     def live_board() -> None:
         stats = service.dashboard()
-        st.markdown(
-            metric_cards(
-                [
-                    ("현재 입장", stats["active"]),
-                    ("누적 방문", stats["total"]),
-                    ("VIP 입장", stats["vip_active"]),
-                    ("현재 총 포인트", f"{stats['active_points']:,}"),
-                ]
-            ),
-            unsafe_allow_html=True,
-        )
-        left, right = st.columns([1.15, 0.85], gap="large")
-        with left:
-            st.markdown("### 현재 포인트 순위")
-            st.markdown(leaderboard_html(stats["leaderboard"]), unsafe_allow_html=True)
-        with right:
-            st.markdown("### 입장 흐름")
-            traffic = pd.DataFrame(stats["traffic"])
-            if traffic.empty:
-                st.info("입장 데이터가 쌓이면 시간대별 흐름이 표시됩니다.")
-            else:
-                fig = px.bar(traffic, x="시간", y="입장", text_auto=True)
-                fig.update_traces(marker_color="#dcbf73", hovertemplate="%{x}<br>%{y}명<extra></extra>")
-                fig.update_layout(
-                    height=310,
-                    margin=dict(l=0, r=0, t=8, b=0),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font_color="#d9e2de",
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(gridcolor="rgba(220,191,115,.12)", title=None),
-                )
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            st.markdown("### 최근 입장")
-            for row in stats["recent"][:5]:
-                st.markdown(
-                    f"<div class='rank-row' style='grid-template-columns:minmax(0,1fr) 70px'><div><div class='rank-name'>{esc(row['name'])}</div><div class='rank-code'>{esc(row['code'])} · {service.format_time(row['checked_in_at'])}</div></div><div class='rank-points' style='font-size:.8rem'>{'입장 중' if row['status'] == 'active' else '퇴장'}</div></div>",
-                    unsafe_allow_html=True,
-                )
+        st.markdown(podium_html(stats["leaderboard"][:3]), unsafe_allow_html=True)
+        st.markdown("### 현재 포인트 순위")
+        st.markdown(leaderboard_html(stats["leaderboard"]), unsafe_allow_html=True)
 
     live_board()
     st.link_button("처음 화면으로", "?view=home")
@@ -363,85 +354,73 @@ def render_admin(service: LoungeService) -> None:
             del st.session_state["auth"]
             st.rerun()
 
-    tabs = st.tabs(["실시간 현황", "포인트 기록", "퇴장 처리", "방문 명단", "설정 · 백업"])
-    with tabs[0]:
-        _admin_overview(service)
-    with tabs[1]:
-        _points_console(service, auth["username"])
-    with tabs[2]:
+    _quick_points_console(service, auth["username"])
+    with st.expander("퇴장 처리"):
         _checkout_console(service, auth["username"])
-    with tabs[3]:
+    with st.expander("방문 명단"):
         _participant_list(service, auth["username"])
-    with tabs[4]:
+    with st.expander("백업 · 계정 관리"):
         _settings_console(service, auth["username"])
     footer()
 
 
-def _admin_overview(service: LoungeService) -> None:
-    @st.fragment(run_every="5s")
-    def live_admin() -> None:
-        stats = service.dashboard()
-        st.markdown(
-            metric_cards(
-                [
-                    ("현재 입장", stats["active"]),
-                    ("누적 방문", stats["total"]),
-                    ("퇴장 완료", stats["exited"]),
-                    ("VIP 입장", stats["vip_active"]),
-                ]
-            ),
-            unsafe_allow_html=True,
-        )
-        left, right = st.columns([1.05, 0.95], gap="large")
-        with left:
-            st.markdown("#### 실시간 순위")
-            st.markdown(leaderboard_html(stats["leaderboard"][:7]), unsafe_allow_html=True)
-        with right:
-            st.markdown("#### 최근 포인트 기록")
-            txs = service.recent_transactions(8)
-            if not txs:
-                st.info("아직 포인트 기록이 없습니다.")
-            else:
-                table = pd.DataFrame(
-                    [
-                        {
-                            "시각": service.format_time(tx["time"]),
-                            "참가자": f"{tx['name']} ({tx['code']})",
-                            "변동": f"{tx['delta']:+,}",
-                            "잔액": f"{tx['balance']:,}",
-                            "활동": tx["activity"],
-                        }
-                        for tx in txs
-                    ]
-                )
-                st.dataframe(table, hide_index=True, use_container_width=True)
-        st.caption("● 5초 자동 갱신")
+def _quick_points_console(service: LoungeService, operator: str) -> None:
+    st.markdown("### 빠른 포인트 입력")
+    st.markdown(
+        '<div class="quick-guide"><strong>두 글자 ID + 받은 포인트</strong>'
+        '<span>예: <b>RT70</b> 입력 후 Enter → RT에게 70P 추가</span></div>',
+        unsafe_allow_html=True,
+    )
+    feedback = st.session_state.pop("quick_feedback", None)
+    if feedback:
+        kind, message = feedback
+        if kind == "success":
+            st.markdown(f'<div class="quick-result success">{esc(message)}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="quick-result error">{esc(message)}</div>', unsafe_allow_html=True)
 
-    live_admin()
-
-
-def _points_console(service: LoungeService, operator: str) -> None:
-    st.markdown("### 활동 포인트 기록")
-    st.caption("게임 결과를 자동 산출하지 않습니다. 운영자가 확인한 축제 포인트만 기록합니다.")
-    selected = participant_picker(service, "points", active_only=True)
-    if not selected:
-        return
-    with st.form("points_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            delta = st.number_input("포인트 변동", min_value=-100000, max_value=100000, value=10, step=5)
-        with col2:
-            activity = st.selectbox(
-                "게임/활동", ["테이블 A", "테이블 B", "미니게임", "이벤트 보너스", "운영 정정"]
+    with st.container(key="quick_point_entry"):
+        with st.form("quick_points_form", clear_on_submit=True):
+            command = st.text_input(
+                "빠른 포인트 입력",
+                placeholder="RT70",
+                label_visibility="collapsed",
+                max_chars=10,
             )
-        note = st.text_input("메모 (선택)", max_chars=200, placeholder="라운드·운영 사유 등")
-        submitted = st.form_submit_button("포인트 기록", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("기록", type="primary", use_container_width=True)
     if submitted:
         try:
-            balance = service.adjust_points(selected["id"], int(delta), activity, note, operator)
-            st.success(f"{selected['name']}님의 포인트가 {int(delta):+,}P 반영되었습니다. 현재 {balance:,}P")
+            result = service.quick_adjust_points(command, operator)
+            st.session_state["quick_feedback"] = (
+                "success",
+                f"{result.display_code} · {result.name}  {result.delta:+,}P  →  현재 {result.balance:,}P",
+            )
         except ValueError as exc:
-            st.error(str(exc))
+            st.session_state["quick_feedback"] = ("error", str(exc))
+        st.rerun()
+
+    components.html(
+        """
+        <script>
+        let attempts = 0;
+        const focusQuickInput = setInterval(() => {
+          const input = window.parent.document.querySelector(
+            'input[aria-label="빠른 포인트 입력"]'
+          );
+          attempts += 1;
+          if (input) {
+            input.focus();
+            input.select();
+            clearInterval(focusQuickInput);
+          } else if (attempts > 30) {
+            clearInterval(focusQuickInput);
+          }
+        }, 60);
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def _checkout_console(service: LoungeService, operator: str) -> None:
@@ -498,71 +477,22 @@ def _participant_list(service: LoungeService, operator: str) -> None:
 
     exited = [row for row in rows if row["status"] == "exited"]
     if exited:
-        with st.expander("잘못 처리한 퇴장 복구"):
-            labels = {
-                row[
-                    "id"
-                ]: f"{row['name']} · {row['code']} · {service.format_time(row['checked_out_at'], True)}"
-                for row in exited
-            }
-            chosen = st.selectbox("복구할 참가자", list(labels), format_func=lambda value: labels[value])
-            if st.button("입장 중 상태로 복구"):
-                try:
-                    service.reopen_participant(chosen, operator)
-                    st.success("퇴장 기록이 복구되었습니다.")
-                except ValueError as exc:
-                    st.error(str(exc))
+        st.markdown("#### 잘못 처리한 퇴장 복구")
+        labels = {
+            row["id"]: f"{row['name']} · {row['code']} · {service.format_time(row['checked_out_at'], True)}"
+            for row in exited
+        }
+        chosen = st.selectbox("복구할 참가자", list(labels), format_func=lambda value: labels[value])
+        if st.button("입장 중 상태로 복구"):
+            try:
+                service.reopen_participant(chosen, operator)
+                st.success("퇴장 기록이 복구되었습니다.")
+            except ValueError as exc:
+                st.error(str(exc))
 
 
 def _settings_console(service: LoungeService, operator: str) -> None:
     settings = service.settings()
-    st.markdown("### 행사 설정")
-    with st.form("settings_form"):
-        event_name = st.text_input("행사명", value=settings.get("event_name", ""), max_chars=80)
-        subtitle = st.text_input("부제", value=settings.get("event_subtitle", ""), max_chars=120)
-        a, b, c = st.columns(3)
-        with a:
-            general_start = st.number_input(
-                "일반 시작 포인트",
-                min_value=0,
-                max_value=100000,
-                value=int(settings.get("general_start_points", "0")),
-            )
-        with b:
-            vip_start = st.number_input(
-                "VIP 시작 포인트",
-                min_value=0,
-                max_value=100000,
-                value=int(settings.get("vip_start_points", "20")),
-            )
-        with c:
-            board_size = st.number_input(
-                "순위표 인원", min_value=3, max_value=30, value=int(settings.get("leaderboard_size", "10"))
-            )
-        retention = st.number_input(
-            "퇴장 후 개인정보 보관일",
-            min_value=1,
-            max_value=365,
-            value=int(settings.get("privacy_retention_days", "30")),
-        )
-        submitted = st.form_submit_button("설정 저장", type="primary")
-    if submitted:
-        try:
-            service.update_settings(
-                {
-                    "event_name": event_name,
-                    "event_subtitle": subtitle,
-                    "general_start_points": str(general_start),
-                    "vip_start_points": str(vip_start),
-                    "leaderboard_size": str(board_size),
-                    "privacy_retention_days": str(retention),
-                },
-                operator,
-            )
-            st.success("설정을 저장했습니다.")
-        except ValueError as exc:
-            st.error(str(exc))
-
     st.markdown("### 데이터 백업")
     st.caption("전화번호가 포함된 파일이므로 다운로드 후 운영 책임자만 보관하세요.")
     c1, c2 = st.columns(2)
@@ -584,25 +514,25 @@ def _settings_console(service: LoungeService, operator: str) -> None:
             use_container_width=True,
         )
 
-    with st.expander("보관기간이 지난 개인정보 익명화"):
-        st.write(f"현재 보관기간: 퇴장 후 {settings.get('privacy_retention_days', '30')}일")
-        confirm = st.checkbox("대상자의 이름·전화번호를 되돌릴 수 없게 익명화합니다.", key="purge_confirm")
-        if st.button("기한 만료 개인정보 익명화", disabled=not confirm):
-            count = service.purge_expired_personal_data(operator)
-            st.success(f"{count}명의 개인정보를 익명화했습니다.")
+    st.markdown("### 개인정보 정리")
+    st.caption(f"현재 보관기간: 퇴장 후 {settings.get('privacy_retention_days', '30')}일")
+    confirm = st.checkbox("기한이 지난 이름·전화번호를 되돌릴 수 없게 익명화합니다.", key="purge_confirm")
+    if st.button("기한 만료 개인정보 익명화", disabled=not confirm):
+        count = service.purge_expired_personal_data(operator)
+        st.success(f"{count}명의 개인정보를 익명화했습니다.")
 
-    with st.expander("내 비밀번호 변경"):
-        with st.form("password_change"):
-            current = st.text_input("현재 비밀번호", type="password")
-            new = st.text_input("새 비밀번호", type="password")
-            new_confirm = st.text_input("새 비밀번호 확인", type="password")
-            change = st.form_submit_button("비밀번호 변경")
-        if change:
-            if new != new_confirm:
-                st.error("새 비밀번호 확인이 일치하지 않습니다.")
-            else:
-                try:
-                    service.change_password(operator, current, new)
-                    st.success("비밀번호를 변경했습니다.")
-                except ValueError as exc:
-                    st.error(str(exc))
+    st.markdown("### 내 비밀번호 변경")
+    with st.form("password_change"):
+        current = st.text_input("현재 비밀번호", type="password")
+        new = st.text_input("새 비밀번호", type="password")
+        new_confirm = st.text_input("새 비밀번호 확인", type="password")
+        change = st.form_submit_button("비밀번호 변경")
+    if change:
+        if new != new_confirm:
+            st.error("새 비밀번호 확인이 일치하지 않습니다.")
+        else:
+            try:
+                service.change_password(operator, current, new)
+                st.success("비밀번호를 변경했습니다.")
+            except ValueError as exc:
+                st.error(str(exc))
