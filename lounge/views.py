@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from .config import get_setting
 from .service import LoungeService
 
 
@@ -248,12 +249,18 @@ def render_board(service: LoungeService) -> None:
 def _initial_admin_setup(service: LoungeService) -> None:
     top_brand(service, "FIRST-RUN SECURITY SETUP")
     st.markdown("## 최초 관리자 등록")
-    st.warning(
-        "메인 컴퓨터 실행 창에 표시된 초기 설정 코드로 운영 책임자를 확인합니다. 비밀번호는 저장소나 단체 채팅에 올리지 마세요."
-    )
+    if get_setting("INITIAL_SETUP_CODE"):
+        st.success("Streamlit에서 직접 지정한 초기 설정 코드가 연결되었습니다.")
+    else:
+        st.warning(
+            "고정 초기 설정 코드가 아직 연결되지 않았습니다. 로컬 실행 시에는 실행 창에 표시된 임시 코드를 사용합니다."
+        )
+    st.caption("코드를 방금 변경했다면 이 페이지를 한 번 새로고침한 뒤 입력하세요.")
     with st.form("first_admin"):
         setup_code = st.text_input(
-            "초기 설정 코드", type="password", help="메인 컴퓨터 실행 창에 표시됩니다."
+            "초기 설정 코드",
+            type="password",
+            help="Streamlit 앱 설정의 Secrets에 저장한 INITIAL_SETUP_CODE 값입니다.",
         )
         username = st.text_input("관리자 아이디", placeholder="patch_admin")
         password = st.text_input("비밀번호", type="password", help="8자 이상")

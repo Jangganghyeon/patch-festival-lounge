@@ -47,6 +47,8 @@
 4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `INITIAL_SETUP_CODE`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
 5. 배포 후 `?view=kiosk`, `?view=board`, `?view=admin` 주소를 각 장치에 북마크합니다.
 
+`INITIAL_SETUP_CODE`를 변경한 뒤에는 열려 있던 관리자 페이지를 한 번 새로고침합니다. 앱은 새 설정을 다시 읽으며, 관리자 등록 화면에 **직접 지정한 초기 설정 코드가 연결되었습니다**라는 안내가 표시됩니다.
+
 암호화 키는 아래 명령으로 만들 수 있습니다.
 
 ```bash

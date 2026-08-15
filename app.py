@@ -4,7 +4,7 @@ import logging
 
 import streamlit as st
 
-from lounge.config import load_config
+from lounge.config import RuntimeConfig, load_config
 from lounge.database import create_db
 from lounge.service import LoungeService
 from lounge.styles import GLOBAL_CSS
@@ -23,13 +23,15 @@ st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 
 @st.cache_resource
-def get_service() -> LoungeService:
-    config = load_config()
+def get_service(config: RuntimeConfig) -> LoungeService:
     _engine, session_factory = create_db(config)
     return LoungeService(session_factory, config)
 
 
-service = get_service()
+# Read Streamlit Secrets on every rerun. The database service is still cached,
+# but a changed secret produces a new configuration and refreshes the service.
+runtime_config = load_config()
+service = get_service(runtime_config)
 view = str(st.query_params.get("view", "home")).lower()
 
 try:
