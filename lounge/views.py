@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import html
-import time
-from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from .config import get_setting
 from .service import LoungeService
 
 
@@ -237,65 +234,6 @@ def render_board(service: LoungeService) -> None:
     footer()
 
 
-def _initial_admin_setup(service: LoungeService) -> None:
-    top_brand(service, "FIRST-RUN SECURITY SETUP")
-    st.markdown("## 최초 관리자 등록")
-    if get_setting("INITIAL_SETUP_CODE"):
-        st.success("Streamlit에서 직접 지정한 초기 설정 코드가 연결되었습니다.")
-    else:
-        st.warning(
-            "고정 초기 설정 코드가 아직 연결되지 않았습니다. 로컬 실행 시에는 실행 창에 표시된 임시 코드를 사용합니다."
-        )
-    st.caption("코드를 방금 변경했다면 이 페이지를 한 번 새로고침한 뒤 입력하세요.")
-    with st.form("first_admin"):
-        setup_code = st.text_input(
-            "초기 설정 코드",
-            type="password",
-            help="Streamlit 앱 설정의 Secrets에 저장한 INITIAL_SETUP_CODE 값입니다.",
-        )
-        username = st.text_input("관리자 아이디", placeholder="patch_admin")
-        password = st.text_input("비밀번호", type="password", help="8자 이상")
-        confirmation = st.text_input("비밀번호 확인", type="password")
-        submitted = st.form_submit_button("관리자 계정 생성", type="primary", use_container_width=True)
-    if submitted:
-        if password != confirmation:
-            st.error("비밀번호 확인이 일치하지 않습니다.")
-        else:
-            try:
-                service.create_first_admin(username, password, setup_code)
-                st.success("관리자 계정이 생성되었습니다. 로그인 화면으로 이동합니다.")
-                time.sleep(0.7)
-                st.rerun()
-            except ValueError as exc:
-                st.error(str(exc))
-
-
-def _admin_login(service: LoungeService) -> None:
-    top_brand(service, "AUTHORIZED STAFF ONLY")
-    st.markdown("## 운영자 로그인")
-    locked_until = st.session_state.get("login_locked_until", 0.0)
-    if time.time() < locked_until:
-        st.error("로그인 시도가 잠시 제한되었습니다. 30초 후 다시 시도해 주세요.")
-        return
-    with st.form("admin_login"):
-        username = st.text_input("아이디")
-        password = st.text_input("비밀번호", type="password")
-        submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
-    if submitted:
-        ok, role = service.authenticate(username, password)
-        if ok:
-            st.session_state["auth"] = {"username": username.strip(), "role": role}
-            st.session_state["login_failures"] = 0
-            st.rerun()
-        else:
-            failures = int(st.session_state.get("login_failures", 0)) + 1
-            st.session_state["login_failures"] = failures
-            if failures >= 5:
-                st.session_state["login_locked_until"] = time.time() + 30
-            st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
-    st.link_button("처음 화면으로", "?view=home")
-
-
 def participant_strip(item: dict) -> None:
     label = "VIP" if item["category"] == "vip" else "일반"
     st.markdown(
@@ -332,35 +270,14 @@ def participant_picker(service: LoungeService, key: str, active_only: bool = Tru
 
 
 def render_admin(service: LoungeService) -> None:
-    if not service.has_admin():
-        _initial_admin_setup(service)
-        footer()
-        return
-    if "auth" not in st.session_state:
-        _admin_login(service)
-        footer()
-        return
-
-    auth = st.session_state["auth"]
     top_brand(service, "OPERATIONS CONSOLE")
-    top_left, top_right = st.columns([4, 1])
-    with top_left:
-        st.markdown(
-            f"## 운영자 콘솔 <span style='color:#a5b6ae;font-size:.9rem'>· {esc(auth['username'])}</span>",
-            unsafe_allow_html=True,
-        )
-    with top_right:
-        if st.button("로그아웃", use_container_width=True):
-            del st.session_state["auth"]
-            st.rerun()
-
-    _quick_points_console(service, auth["username"])
+    st.markdown("## 운영자 콘솔")
+    operator = "festival_staff"
+    _quick_points_console(service, operator)
     with st.expander("퇴장 처리"):
-        _checkout_console(service, auth["username"])
+        _checkout_console(service, operator)
     with st.expander("방문 명단"):
-        _participant_list(service, auth["username"])
-    with st.expander("백업 · 계정 관리"):
-        _settings_console(service, auth["username"])
+        _participant_list(service, operator)
     footer()
 
 
@@ -450,20 +367,14 @@ def _participant_list(service: LoungeService, operator: str) -> None:
     st.markdown("### 방문 명단")
     search = st.text_input("명단 검색", key="list_search", placeholder="이름·코드·전화번호 뒤 4자리")
     status = st.radio("상태", ["전체", "입장 중", "퇴장"], horizontal=True)
-    reveal = st.checkbox("전화번호 전체 보기 (관리자 화면에서만)")
     rows = service.search_participants(search, active_only=status == "입장 중", limit=500)
     if status == "퇴장":
         rows = [row for row in rows if row["status"] == "exited"]
-    if reveal:
-        rows = [service.get_participant(row["id"], reveal_phone=True) for row in rows]
     table = pd.DataFrame(
         [
             {
-                "코드": row["code"],
+                "ID": row["code"],
                 "이름": row["name"],
-                "나이": row["age"],
-                "전화번호": row["phone"],
-                "구분": "VIP" if row["category"] == "vip" else "일반",
                 "상태": "입장 중" if row["status"] == "active" else "퇴장",
                 "포인트": row["points"],
                 "입장": service.format_time(row["checked_in_at"], include_date=True),
@@ -487,52 +398,5 @@ def _participant_list(service: LoungeService, operator: str) -> None:
             try:
                 service.reopen_participant(chosen, operator)
                 st.success("퇴장 기록이 복구되었습니다.")
-            except ValueError as exc:
-                st.error(str(exc))
-
-
-def _settings_console(service: LoungeService, operator: str) -> None:
-    settings = service.settings()
-    st.markdown("### 데이터 백업")
-    st.caption("전화번호가 포함된 파일이므로 다운로드 후 운영 책임자만 보관하세요.")
-    c1, c2 = st.columns(2)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    with c1:
-        st.download_button(
-            "방문 명단 CSV 다운로드",
-            data=service.export_participants_csv(),
-            file_name=f"festival_participants_{stamp}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-    with c2:
-        st.download_button(
-            "포인트 이력 CSV 다운로드",
-            data=service.export_transactions_csv(),
-            file_name=f"festival_points_{stamp}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-    st.markdown("### 개인정보 정리")
-    st.caption(f"현재 보관기간: 퇴장 후 {settings.get('privacy_retention_days', '30')}일")
-    confirm = st.checkbox("기한이 지난 이름·전화번호를 되돌릴 수 없게 익명화합니다.", key="purge_confirm")
-    if st.button("기한 만료 개인정보 익명화", disabled=not confirm):
-        count = service.purge_expired_personal_data(operator)
-        st.success(f"{count}명의 개인정보를 익명화했습니다.")
-
-    st.markdown("### 내 비밀번호 변경")
-    with st.form("password_change"):
-        current = st.text_input("현재 비밀번호", type="password")
-        new = st.text_input("새 비밀번호", type="password")
-        new_confirm = st.text_input("새 비밀번호 확인", type="password")
-        change = st.form_submit_button("비밀번호 변경")
-    if change:
-        if new != new_confirm:
-            st.error("새 비밀번호 확인이 일치하지 않습니다.")
-        else:
-            try:
-                service.change_password(operator, current, new)
-                st.success("비밀번호를 변경했습니다.")
             except ValueError as exc:
                 st.error(str(exc))

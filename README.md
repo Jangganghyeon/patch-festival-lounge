@@ -12,8 +12,8 @@
 - 퇴장 시 실물 보유 포인트 확인 및 최종값 저장
 - 실수로 처리한 퇴장 복구
 - 2초 자동 갱신 TOP 3 시상대와 개인정보 보호형 전체 순위표
-- 방문자/포인트 이력 CSV 백업
-- 전화번호 암호화 저장, 일반 화면 마스킹, 관리자 로그인
+- 전화번호 암호화 저장과 공개 화면 개인정보 마스킹
+- 로그인 없이 바로 열리는 행사 운영진용 초간단 콘솔
 - 보관기간이 지난 개인정보의 되돌릴 수 없는 익명화
 - SQLite 로컬 운영 및 PostgreSQL 클라우드 운영 지원
 
@@ -26,7 +26,7 @@
 - 실시간 현황판: `http://메인컴퓨터IP:8501/?view=board`
 - 운영자 콘솔: `http://메인컴퓨터IP:8501/?view=admin`
 
-입장용 컴퓨터와 현황판 컴퓨터를 메인 컴퓨터와 같은 Wi-Fi에 연결한 뒤 해당 주소를 열면 됩니다. 최초 운영자 콘솔 접속 시 실행 창에 표시된 **초기 설정 코드**를 입력하고 관리자 계정을 한 번 생성합니다.
+입장용 컴퓨터와 현황판 컴퓨터를 메인 컴퓨터와 같은 Wi-Fi에 연결한 뒤 해당 주소를 열면 됩니다. 운영자 콘솔은 별도의 등록이나 로그인 없이 바로 빠른 포인트 입력 화면을 표시합니다.
 
 > 학교 네트워크가 기기 간 통신을 막는 경우 휴대전화 핫스팟이나 동아리 공유기를 사용하거나, 아래의 Streamlit Community Cloud 배포를 사용하세요.
 
@@ -45,10 +45,8 @@
 1. 이 프로젝트를 GitHub 저장소에 올립니다.
 2. Streamlit Community Cloud에서 저장소와 `app.py`를 선택합니다.
 3. 영구 저장을 위해 PostgreSQL 데이터베이스를 준비합니다. 로컬 기본값인 SQLite는 클라우드 앱 재시작 시 데이터가 사라질 수 있어 실제 행사에는 권장하지 않습니다.
-4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `INITIAL_SETUP_CODE`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
+4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
 5. 배포 후 `?view=kiosk`, `?view=board`, `?view=admin` 주소를 각 장치에 북마크합니다.
-
-`INITIAL_SETUP_CODE`를 변경한 뒤에는 열려 있던 관리자 페이지를 한 번 새로고침합니다. 앱은 새 설정을 다시 읽으며, 관리자 등록 화면에 **직접 지정한 초기 설정 코드가 연결되었습니다**라는 안내가 표시됩니다.
 
 암호화 키는 아래 명령으로 만들 수 있습니다.
 
@@ -62,17 +60,15 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 ### 행사 전날
 
-- 운영자 계정 생성 및 로그인 확인
 - 두 글자 ID와 빠른 포인트 입력 확인
 - 휴대전화 2대로 동시 입장 테스트
 - 포인트 증감과 퇴장 처리 테스트
-- CSV 다운로드 확인
 - 메인 컴퓨터 절전 모드 해제
 - 같은 Wi-Fi에서 키오스크/현황판 주소 접속 확인
 
 ### 행사 종료 직후
 
-- 방문 명단 CSV와 포인트 이력 CSV 다운로드
+- 행사 운영 데이터 최종 확인
 - 파일을 운영 책임자에게 전달하고 공개 공유 금지
 - 설정한 보관기간 이후 개인정보 익명화 실행
 
@@ -83,7 +79,6 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - 순위표 공개에 동의하지 않으면 이름은 자동 마스킹되며, 운영용 두 글자 ID는 표시됩니다.
 - 포인트는 음수가 될 수 없고, 변경마다 활동명·운영자·시각·변경 후 잔액이 기록됩니다.
 - 퇴장 정산값이 시스템 잔액과 다르면 정산 변경 이력이 자동 생성됩니다.
-- 관리자 비밀번호는 scrypt 해시로 저장됩니다.
 
 ## 개발 및 테스트
 

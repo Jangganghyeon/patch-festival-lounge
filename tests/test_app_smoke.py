@@ -6,7 +6,7 @@ from cryptography.fernet import Fernet
 from streamlit.testing.v1 import AppTest
 
 from lounge.config import RuntimeConfig
-from lounge.database import create_db
+from lounge.database import Participant, create_db
 from lounge.service import LoungeService
 
 
@@ -19,7 +19,7 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
         ("home", "입장 등록"),
         ("kiosk", "게임 라운지 입장 등록"),
         ("board", "현재 포인트 순위"),
-        ("admin", "최초 관리자 등록"),
+        ("admin", "빠른 포인트 입력"),
     ]
     for view, expected in cases:
         app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
@@ -72,6 +72,8 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
         leaderboard_opt_in=True,
     )
     service.adjust_points(participant.participant_id, 70, "테스트", "", "operator")
+    with service.sessions.begin() as session:
+        session.get(Participant, participant.participant_id).display_code = "YQNRV2"
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "board"
@@ -79,7 +81,10 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     rendered = "\n".join(element.value for element in app.markdown)
     assert len(app.exception) == 0
     assert "TOP 3 · LIVE RANKING" in rendered
-    assert participant.display_code in rendered
+    migrated_code = service.get_participant(participant.participant_id)["code"]
+    assert len(migrated_code) == 2
+    assert migrated_code in rendered
+    assert "YQNRV2" not in rendered
     assert "입장 흐름" not in rendered
     assert "최근 입장" not in rendered
 
@@ -97,7 +102,6 @@ def test_admin_quick_entry_adds_points(tmp_path, monkeypatch):
     )
     _engine, factory = create_db(config)
     service = LoungeService(factory, config)
-    service.create_first_admin("patch_admin", "safe-password-123", "SETUP123")
     participant = service.check_in(
         name="홍길동",
         age=17,
@@ -110,9 +114,6 @@ def test_admin_quick_entry_adds_points(tmp_path, monkeypatch):
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "admin"
     app.run(timeout=20)
-    next(item for item in app.text_input if item.label == "아이디").input("patch_admin")
-    next(item for item in app.text_input if item.label == "비밀번호").input("safe-password-123")
-    next(item for item in app.button if item.label == "로그인").click().run(timeout=20)
     assert len(app.exception) == 0
 
     next(item for item in app.text_input if item.label == "빠른 포인트 입력").input(

@@ -22,16 +22,19 @@ st.set_page_config(
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 
+DATABASE_SCHEMA_VERSION = 2
+
+
 @st.cache_resource
-def get_service(config: RuntimeConfig) -> LoungeService:
-    _engine, session_factory = create_db(config)
-    return LoungeService(session_factory, config)
+def get_database(config: RuntimeConfig, schema_version: int):
+    if schema_version < 1:
+        raise ValueError("데이터베이스 버전이 올바르지 않습니다.")
+    return create_db(config)
 
 
-# Read Streamlit Secrets on every rerun. The database service is still cached,
-# but a changed secret produces a new configuration and refreshes the service.
 runtime_config = load_config()
-service = get_service(runtime_config)
+_engine, session_factory = get_database(runtime_config, DATABASE_SCHEMA_VERSION)
+service = LoungeService(session_factory, runtime_config)
 view = str(st.query_params.get("view", "home")).lower()
 
 try:
