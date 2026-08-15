@@ -127,16 +127,30 @@ def render_kiosk(service: LoungeService) -> None:
         with st.form("check_in_form", clear_on_submit=False):
             left, right = st.columns(2, gap="large")
             with left:
-                name = st.text_input("이름 *", max_chars=40, placeholder="홍길동")
-                age = st.number_input("나이 *", min_value=7, max_value=100, value=17, step=1)
+                with st.container(key="kiosk_guest_card"):
+                    st.markdown(
+                        "<div class='kiosk-section-kicker'>01 · GUEST PROFILE</div>"
+                        "<div class='kiosk-section-title'>참가자 정보</div>"
+                        "<div class='kiosk-section-copy'>이름과 나이를 정확하게 입력해 주세요.</div>",
+                        unsafe_allow_html=True,
+                    )
+                    name = st.text_input("이름 *", max_chars=40, placeholder="홍길동")
+                    age = st.number_input("나이 *", min_value=7, max_value=100, value=17, step=1)
             with right:
-                phone = st.text_input("전화번호 *", max_chars=15, placeholder="010-1234-5678")
-                category_label = st.radio(
-                    "참가 유형 *",
-                    ["일반", "VIP"],
-                    horizontal=True,
-                    help="VIP 여부는 운영진 안내에 따라 선택하세요.",
-                )
+                with st.container(key="kiosk_access_card"):
+                    st.markdown(
+                        "<div class='kiosk-section-kicker'>02 · FESTIVAL ACCESS</div>"
+                        "<div class='kiosk-section-title'>입장 정보</div>"
+                        "<div class='kiosk-section-copy'>연락처와 안내받은 참가 유형을 선택해 주세요.</div>",
+                        unsafe_allow_html=True,
+                    )
+                    phone = st.text_input("전화번호 *", max_chars=15, placeholder="010-1234-5678")
+                    category_label = st.radio(
+                        "참가 유형 *",
+                        ["일반", "VIP"],
+                        horizontal=True,
+                        help="VIP 여부는 운영진 안내에 따라 선택하세요.",
+                    )
             submitted = st.form_submit_button(
                 "게임 라운지 참가",
                 type="primary",
@@ -237,9 +251,18 @@ def render_board(service: LoungeService) -> None:
     @st.fragment(run_every="2s")
     def live_board() -> None:
         stats = service.dashboard()
-        st.markdown(podium_html(stats["leaderboard"][:3]), unsafe_allow_html=True)
-        st.markdown("### 현재 포인트 순위")
-        st.markdown(leaderboard_html(stats["leaderboard"]), unsafe_allow_html=True)
+        podium_column, ranking_column = st.columns([1.35, 0.65], gap="large", vertical_alignment="top")
+        with podium_column:
+            with st.container(key="board_podium"):
+                st.markdown(podium_html(stats["leaderboard"][:3]), unsafe_allow_html=True)
+        with ranking_column:
+            with st.container(key="board_ranking"):
+                st.markdown(
+                    "<div class='ranking-heading'><span>ALL PLAYERS</span>"
+                    "<strong>현재 포인트 순위</strong></div>"
+                    + leaderboard_html(stats["leaderboard"]),
+                    unsafe_allow_html=True,
+                )
 
     live_board()
     st.link_button("처음 화면으로", "?view=home")

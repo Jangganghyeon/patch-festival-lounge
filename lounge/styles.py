@@ -29,6 +29,8 @@ html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 [data-testid="stToolbar"] { right: 1rem; }
 [data-testid="stSidebar"] { background: #081612; border-right: 1px solid var(--line); }
 .block-container { max-width: 1180px; padding-top: 2.2rem; padding-bottom: 4rem; }
+.block-container:has(.st-key-check_in_kiosk),
+.block-container:has(.st-key-board_podium) { max-width: 1520px; }
 
 h1, h2, h3 { color: var(--cream) !important; letter-spacing: -.02em; }
 p, label, .stCaption { color: #d9e2de; }
@@ -202,20 +204,70 @@ input, textarea { color: var(--cream) !important; }
 [data-baseweb="popover"], [role="listbox"] { background: #10271f !important; }
 
 .st-key-check_in_kiosk [data-testid="stForm"] {
-  padding: 2.1rem; border-radius: 26px; border-color: rgba(220,191,115,.38);
-  box-shadow: 0 24px 70px rgba(0,0,0,.22);
+  padding: .8rem 0 0; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none;
+}
+.st-key-kiosk_guest_card, .st-key-kiosk_access_card {
+  min-height: 350px; padding: 1.7rem 2rem 1.9rem; position: relative; overflow: hidden;
+  border: 1px solid rgba(220,191,115,.3); border-radius: 24px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(220,191,115,.12), transparent 42%),
+    linear-gradient(145deg, rgba(17,42,34,.94), rgba(8,24,20,.96));
+  box-shadow: 0 24px 65px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.04);
+}
+.st-key-kiosk_guest_card:before, .st-key-kiosk_access_card:before {
+  content: ''; position: absolute; width: 140px; height: 1px; right: 0; top: 0;
+  background: linear-gradient(90deg,transparent,#f1d98f);
+}
+.kiosk-section-kicker {
+  color: var(--gold); font-size: .7rem; font-weight: 900; letter-spacing: .2em;
+  margin-bottom: .35rem;
+}
+.kiosk-section-title { color: var(--cream); font-size: 1.35rem; font-weight: 900; }
+.kiosk-section-copy { color: var(--muted); font-size: .86rem; margin: .25rem 0 1.15rem; }
+.st-key-kiosk_guest_card [data-testid="stVerticalBlock"],
+.st-key-kiosk_access_card [data-testid="stVerticalBlock"] { gap: .72rem; }
+.st-key-check_in_kiosk [data-baseweb="input"] > div {
+  min-height: 62px; border-radius: 14px;
+  background: rgba(5,20,16,.68) !important; transition: border-color .2s ease, box-shadow .2s ease;
+}
+.st-key-check_in_kiosk [data-baseweb="input"] > div:focus-within {
+  border-color: rgba(244,223,171,.72) !important;
+  box-shadow: 0 0 0 3px rgba(220,191,115,.09), 0 10px 28px rgba(0,0,0,.16);
 }
 .st-key-check_in_kiosk label p, .st-key-check_in_kiosk [data-testid="stWidgetLabel"] p {
-  color: var(--cream) !important; font-size: 1.08rem !important; font-weight: 800 !important;
+  color: var(--cream) !important; font-size: 1rem !important; font-weight: 800 !important;
 }
-.st-key-check_in_kiosk [data-baseweb="input"] > div { min-height: 70px; border-radius: 15px; }
 .st-key-check_in_kiosk input {
-  min-height: 68px; padding: .85rem 1rem !important; font-size: 1.35rem !important; font-weight: 700;
+  min-height: 60px; padding: .75rem 1rem !important; font-size: 1.18rem !important; font-weight: 700;
 }
 .st-key-check_in_kiosk [data-testid="stNumberInput"] button { min-height: 34px; min-width: 42px; }
 .st-key-check_in_kiosk [data-testid="stRadio"] { padding: .7rem 0 1rem; }
 .st-key-check_in_kiosk [data-testid="stRadio"] label { font-size: 1.15rem; margin-right: 1.4rem; }
-.st-key-check_in_kiosk .stFormSubmitButton button { min-height: 66px; font-size: 1.18rem; }
+.st-key-check_in_kiosk .stFormSubmitButton { margin-top: 1rem; }
+.st-key-check_in_kiosk .stFormSubmitButton button {
+  min-height: 64px; border-radius: 16px; font-size: 1.12rem; letter-spacing: .04em;
+  box-shadow: 0 14px 34px rgba(168,131,51,.18), inset 0 1px rgba(255,255,255,.35);
+}
+
+.st-key-board_podium .podium-shell { margin: 1rem 0 1.2rem; }
+.st-key-board_ranking { margin-top: 1rem; }
+.ranking-heading {
+  min-height: 88px; display: flex; flex-direction: column; justify-content: center;
+  padding: 1rem 1.2rem; border: 1px solid rgba(220,191,115,.3); border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  background: radial-gradient(circle at 100% 0%,rgba(220,191,115,.14),transparent 48%),rgba(13,32,27,.92);
+}
+.ranking-heading span { color: var(--gold); font-size: .68rem; font-weight: 900; letter-spacing: .2em; }
+.ranking-heading strong { color: var(--cream); font-size: 1.35rem; margin-top: .18rem; }
+.st-key-board_ranking .panel-card {
+  max-height: 480px; overflow-y: auto; margin: 0; padding: .35rem 1rem .55rem;
+  border-radius: 0 0 22px 22px; box-shadow: 0 24px 65px rgba(0,0,0,.2);
+  scrollbar-width: thin; scrollbar-color: rgba(220,191,115,.42) rgba(5,18,15,.45);
+}
+.st-key-board_ranking .rank-row { grid-template-columns: 42px minmax(0,1fr) 92px; padding: .72rem .15rem; }
+.st-key-board_ranking .rank-number { font-size: 1rem; }
+.st-key-board_ranking .rank-points { font-size: .92rem; }
 
 .quick-guide {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
@@ -255,8 +307,15 @@ input, textarea { color: var(--cream) !important; }
   .podium-2 .podium-step { height: 105px; }
   .podium-3 .podium-step { height: 75px; }
   .quick-guide { align-items: flex-start; flex-direction: column; }
-  .st-key-check_in_kiosk [data-testid="stForm"] { padding: 1.25rem; }
+  .st-key-kiosk_guest_card, .st-key-kiosk_access_card { min-height: auto; padding: 1.35rem; }
   .st-key-check_in_kiosk input { font-size: 1.15rem !important; }
+}
+@media (max-width: 1050px) {
+  [data-testid="stHorizontalBlock"]:has(.st-key-board_podium) { flex-direction: column; }
+  [data-testid="stHorizontalBlock"]:has(.st-key-board_podium) > [data-testid="stColumn"] {
+    width: 100% !important; flex: 1 1 100% !important;
+  }
+  .st-key-board_ranking .panel-card { max-height: 420px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .podium-shell:before, .podium-stage-glow, .podium-sparkle, .podium-place,

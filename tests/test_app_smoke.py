@@ -42,6 +42,9 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     app.query_params["view"] = "kiosk"
     app.run(timeout=20)
     assert len(app.get("link_button")) == 0
+    kiosk_markup = "\n".join(element.value for element in app.markdown)
+    assert "01 · GUEST PROFILE" in kiosk_markup
+    assert "02 · FESTIVAL ACCESS" in kiosk_markup
     app.text_input[0].input("홍길동")
     app.text_input[1].input("010-1234-5678")
     assert len(app.checkbox) == 0
@@ -85,6 +88,7 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     assert '<span>TOP 3</span> · LIVE RANKING' in rendered
     assert 'class="winner-crown"' in rendered
     assert 'class="podium-sparkle sparkle-1"' in rendered
+    assert "class='ranking-heading'" in rendered
     migrated_code = service.get_participant(participant.participant_id)["code"]
     assert len(migrated_code) == 2
     assert migrated_code in rendered
