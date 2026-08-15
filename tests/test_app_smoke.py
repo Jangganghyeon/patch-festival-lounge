@@ -41,6 +41,7 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "kiosk"
     app.run(timeout=20)
+    assert len(app.get("link_button")) == 0
     app.text_input[0].input("홍길동")
     app.text_input[1].input("010-1234-5678")
     assert len(app.checkbox) == 0
@@ -48,6 +49,7 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
 
     assert len(app.exception) == 0
     assert any("ADMISSION COMPLETE" in element.value for element in app.markdown)
+    assert len(app.get("link_button")) == 0
 
 
 def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
@@ -80,7 +82,9 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     app.run(timeout=20)
     rendered = "\n".join(element.value for element in app.markdown)
     assert len(app.exception) == 0
-    assert "TOP 3 · LIVE RANKING" in rendered
+    assert '<span>TOP 3</span> · LIVE RANKING' in rendered
+    assert 'class="winner-crown"' in rendered
+    assert 'class="podium-sparkle sparkle-1"' in rendered
     migrated_code = service.get_participant(participant.participant_id)["code"]
     assert len(migrated_code) == 2
     assert migrated_code in rendered

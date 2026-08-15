@@ -120,24 +120,28 @@ def render_kiosk(service: LoungeService) -> None:
         if st.button("다음 방문자 등록", type="primary", use_container_width=True):
             del st.session_state["last_ticket"]
             st.rerun()
-        st.link_button("처음 화면으로", "?view=home", use_container_width=True)
         footer()
         return
 
-    with st.form("check_in_form", clear_on_submit=False):
-        left, right = st.columns(2)
-        with left:
-            name = st.text_input("이름 *", max_chars=40, placeholder="홍길동")
-            age = st.number_input("나이 *", min_value=7, max_value=100, value=17, step=1)
-        with right:
-            phone = st.text_input("전화번호 *", max_chars=15, placeholder="010-1234-5678")
-            category_label = st.radio(
-                "참가 유형 *",
-                ["일반", "VIP"],
-                horizontal=True,
-                help="VIP 여부는 운영진 안내에 따라 선택하세요.",
+    with st.container(key="check_in_kiosk"):
+        with st.form("check_in_form", clear_on_submit=False):
+            left, right = st.columns(2, gap="large")
+            with left:
+                name = st.text_input("이름 *", max_chars=40, placeholder="홍길동")
+                age = st.number_input("나이 *", min_value=7, max_value=100, value=17, step=1)
+            with right:
+                phone = st.text_input("전화번호 *", max_chars=15, placeholder="010-1234-5678")
+                category_label = st.radio(
+                    "참가 유형 *",
+                    ["일반", "VIP"],
+                    horizontal=True,
+                    help="VIP 여부는 운영진 안내에 따라 선택하세요.",
+                )
+            submitted = st.form_submit_button(
+                "게임 라운지 참가",
+                type="primary",
+                use_container_width=True,
             )
-        submitted = st.form_submit_button("게임 라운지 참가", type="primary", use_container_width=True)
     if submitted:
         try:
             result = service.check_in(
@@ -156,7 +160,6 @@ def render_kiosk(service: LoungeService) -> None:
             st.rerun()
         except ValueError as exc:
             st.error(str(exc))
-    st.link_button("처음 화면으로", "?view=home")
     footer()
 
 
@@ -194,8 +197,14 @@ def podium_html(rows: list[dict]) -> str:
         else:
             name, code, points = "도전자 대기", "--", "0 P"
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}[place]
+        winner_mark = (
+            '<div class="winner-crown">♛</div><div class="winner-ribbon">CHAMPION</div>'
+            if place == 1
+            else ""
+        )
         return (
             f'<div class="podium-place podium-{place}">'
+            f"{winner_mark}"
             f'<div class="podium-medal">{medal}</div>'
             f'<div class="podium-name">{name}</div>'
             f'<div class="podium-id">ID&nbsp; {code}</div>'
@@ -204,7 +213,12 @@ def podium_html(rows: list[dict]) -> str:
         )
 
     return (
-        '<div class="podium-shell"><div class="podium-title">TOP 3 · LIVE RANKING</div>'
+        '<div class="podium-shell"><div class="podium-stage-glow"></div>'
+        '<div class="podium-sparkle sparkle-1">✦</div>'
+        '<div class="podium-sparkle sparkle-2">✧</div>'
+        '<div class="podium-sparkle sparkle-3">✦</div>'
+        '<div class="podium-sparkle sparkle-4">✧</div>'
+        '<div class="podium-title"><span>TOP 3</span> · LIVE RANKING</div>'
         '<div class="podium-grid">'
         + podium_place(2)
         + podium_place(1)
