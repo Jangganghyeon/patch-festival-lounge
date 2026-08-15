@@ -19,7 +19,7 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
         ("home", "입장 등록"),
         ("kiosk", "게임 라운지 입장 등록"),
         ("board", "현재 포인트 순위"),
-        ("admin", "빠른 포인트 입력"),
+        ("admin", "운영자 콘솔"),
     ]
     for view, expected in cases:
         app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
@@ -43,7 +43,7 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     app.run(timeout=20)
     app.text_input[0].input("홍길동")
     app.text_input[1].input("010-1234-5678")
-    app.checkbox[0].check()
+    assert len(app.checkbox) == 0
     app.button[0].click().run(timeout=20)
 
     assert len(app.exception) == 0
@@ -89,7 +89,7 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     assert "최근 입장" not in rendered
 
 
-def test_admin_quick_entry_adds_points(tmp_path, monkeypatch):
+def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'admin.db'}"
     encryption_key = Fernet.generate_key().decode("ascii")
     monkeypatch.setenv("DATABASE_URL", database_url)
@@ -100,25 +100,13 @@ def test_admin_quick_entry_adds_points(tmp_path, monkeypatch):
         field_encryption_key=encryption_key,
         initial_setup_code="SETUP123",
     )
-    _engine, factory = create_db(config)
-    service = LoungeService(factory, config)
-    participant = service.check_in(
-        name="홍길동",
-        age=17,
-        phone="010-1234-5678",
-        category="general",
-        privacy_consent=True,
-        leaderboard_opt_in=True,
-    )
+    create_db(config)
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "admin"
+    app.query_params["panel"] = "chips"
     app.run(timeout=20)
     assert len(app.exception) == 0
-
-    next(item for item in app.text_input if item.label == "빠른 포인트 입력").input(
-        f"{participant.display_code.lower()}70"
-    )
-    next(item for item in app.button if item.label == "기록").click().run(timeout=20)
-    assert len(app.exception) == 0
-    assert service.get_participant(participant.participant_id)["points"] == 70
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "전산 칩 관리" in rendered
+    assert len(app.text_input) == 0

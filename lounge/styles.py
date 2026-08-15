@@ -68,8 +68,19 @@ p, label, .stCaption { color: #d9e2de; }
   content: ''; position: absolute; inset: 12px; border: 1px dashed rgba(220,191,115,.35);
   border-radius: 14px; pointer-events: none;
 }
-.ticket-code { color: var(--gold-soft); font: 700 clamp(2rem, 8vw, 4.4rem)/1 'Playfair Display', serif; letter-spacing: .13em; }
+.ticket-code {
+  color: #fff0a8; font: 700 clamp(4.5rem, 17vw, 8.5rem)/.95 'Playfair Display', serif;
+  letter-spacing: .16em; margin: .7rem 0 .45rem; text-align: center;
+  text-shadow: 0 0 32px rgba(220,191,115,.35);
+}
 .ticket-label { color: var(--muted); font-size: .78rem; letter-spacing: .16em; text-transform: uppercase; }
+.ticket-memory-label {
+  display: inline-block; color: #102018; background: linear-gradient(135deg,#f1dc95,#c49c3c);
+  border-radius: 999px; padding: .5rem .9rem; margin-top: .8rem;
+  font-size: .9rem; font-weight: 900; letter-spacing: .08em;
+}
+.ticket-memory-title { color: var(--cream); font-size: clamp(1.25rem,3vw,1.9rem); font-weight: 900; text-align: center; }
+.ticket-memory-copy { color: #e3cf91; font-size: 1.05rem; font-weight: 700; text-align: center; margin-top: .45rem; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: .8rem; margin: 1rem 0 1.6rem; }
 .metric-card {
@@ -155,18 +166,6 @@ input, textarea { color: var(--cream) !important; }
 }
 .quick-result.success { color: #baf5d5; border: 1px solid rgba(91,227,159,.35); background: rgba(42,128,91,.2); }
 .quick-result.error { color: #ffd0d0; border: 1px solid rgba(200,95,95,.45); background: rgba(139,44,44,.2); }
-.st-key-quick_point_entry [data-testid="stForm"] {
-  padding: 1rem; border-radius: 24px; border-color: rgba(220,191,115,.52);
-  box-shadow: 0 18px 60px rgba(0,0,0,.24), 0 0 0 1px rgba(220,191,115,.05);
-}
-.st-key-quick_point_entry input {
-  min-height: 102px !important; font-size: clamp(2.8rem, 8vw, 5.4rem) !important;
-  line-height: 1 !important; font-weight: 800 !important; text-align: center;
-  letter-spacing: .12em; text-transform: uppercase; color: #fff1b8 !important;
-  caret-color: #5be39f;
-}
-.st-key-quick_point_entry input::placeholder { color: rgba(220,191,115,.28) !important; }
-.st-key-quick_point_entry .stFormSubmitButton button { min-height: 58px; font-size: 1.05rem; }
 
 .stButton > button, .stDownloadButton > button, .stLinkButton > a {
   border-radius: 12px; min-height: 2.75rem; font-weight: 800;

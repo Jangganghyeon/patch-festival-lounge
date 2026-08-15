@@ -4,8 +4,8 @@ import html
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
+from .quick_input import quick_point_input
 from .service import LoungeService
 
 
@@ -107,15 +107,16 @@ def render_kiosk(service: LoungeService) -> None:
             <div class="ticket-card">
               <div class="ticket-label">ADMISSION COMPLETE · 입장 완료</div>
               <div style="margin:.8rem 0 1.3rem;color:#f7f1df;font-size:1.35rem;font-weight:800">환영합니다, {esc(ticket["name"])}님</div>
+              <div class="ticket-memory-label">반드시 기억하세요</div>
               <div class="ticket-code">{esc(ticket["code"])}</div>
-              <div style="color:#a5b6ae;margin-top:.7rem">나의 참가자 ID · 시작 포인트 {ticket["points"]:,} P</div>
+              <div class="ticket-memory-title">이 두 글자가 나의 참가자 ID입니다</div>
+              <div class="ticket-memory-copy">활동 포인트를 받을 때마다 운영진에게 이 ID를 말해 주세요.</div>
+              <div style="color:#a5b6ae;margin-top:.75rem">시작 포인트 {ticket["points"]:,} P</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.info(
-            "두 글자 ID를 기억해 주세요. 활동 포인트를 받을 때 운영진에게 이 ID를 말하면 됩니다."
-        )
+        st.warning(f"중요: 나의 ID는 {ticket['code']}입니다. 화면을 닫기 전에 반드시 기억해 주세요.")
         if st.button("다음 방문자 등록", type="primary", use_container_width=True):
             del st.session_state["last_ticket"]
             st.rerun()
@@ -136,9 +137,6 @@ def render_kiosk(service: LoungeService) -> None:
                 horizontal=True,
                 help="VIP 여부는 운영진 안내에 따라 선택하세요.",
             )
-        st.markdown("##### 개인정보 및 공개 설정")
-        consent = st.checkbox("입·퇴장 기록을 위해 이름, 나이, 전화번호를 수집·이용하는 데 동의합니다. *")
-        leaderboard = st.checkbox("라이브 순위표에 내 이름을 공개하는 데 동의합니다. (선택)")
         submitted = st.form_submit_button("게임 라운지 참가", type="primary", use_container_width=True)
     if submitted:
         try:
@@ -147,8 +145,8 @@ def render_kiosk(service: LoungeService) -> None:
                 age=int(age),
                 phone=phone,
                 category="vip" if category_label == "VIP" else "general",
-                privacy_consent=consent,
-                leaderboard_opt_in=leaderboard,
+                privacy_consent=True,
+                leaderboard_opt_in=True,
             )
             st.session_state["last_ticket"] = {
                 "name": name.strip(),
@@ -271,73 +269,82 @@ def participant_picker(service: LoungeService, key: str, active_only: bool = Tru
 
 def render_admin(service: LoungeService) -> None:
     top_brand(service, "OPERATIONS CONSOLE")
-    st.markdown("## 운영자 콘솔")
     operator = "festival_staff"
-    _quick_points_console(service, operator)
-    with st.expander("퇴장 처리"):
+    panel = str(st.query_params.get("panel", "menu")).lower()
+
+    if panel == "chips":
+        st.markdown("## 전산 칩 관리")
+        _quick_points_console(service, operator)
+        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
+    elif panel == "checkout":
         _checkout_console(service, operator)
-    with st.expander("방문 명단"):
+        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
+    elif panel == "visitors":
         _participant_list(service, operator)
+        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
+    else:
+        st.markdown("## 운영자 콘솔")
+        columns = st.columns(3)
+        menu_items = [
+            (
+                "01",
+                "전산 칩 관리",
+                "두 글자 ID와 포인트를 입력해 가장 빠르게 기록합니다.",
+                "전산 칩 관리 열기",
+                "?view=admin&panel=chips",
+            ),
+            (
+                "02",
+                "퇴장 처리",
+                "참가자를 검색하고 최종 보유 포인트와 퇴장을 기록합니다.",
+                "퇴장 처리 열기",
+                "?view=admin&panel=checkout",
+            ),
+            (
+                "03",
+                "방문 명단",
+                "현재 입장·퇴장 상태와 포인트를 확인합니다.",
+                "방문 명단 열기",
+                "?view=admin&panel=visitors",
+            ),
+        ]
+        for column, (number, title, copy, label, href) in zip(columns, menu_items, strict=True):
+            with column:
+                st.markdown(
+                    f'<div class="mode-card"><div class="mode-num">{number}</div>'
+                    f'<div class="mode-title">{esc(title)}</div>'
+                    f'<div class="mode-copy">{esc(copy)}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.link_button(label, href, use_container_width=True)
     footer()
 
 
 def _quick_points_console(service: LoungeService, operator: str) -> None:
-    st.markdown("### 빠른 포인트 입력")
     st.markdown(
         '<div class="quick-guide"><strong>두 글자 ID + 받은 포인트</strong>'
-        '<span>예: <b>RT70</b> 입력 후 Enter → RT에게 70P 추가</span></div>',
+        '<span>입력창은 자동으로 선택됩니다. 예: <b>RT70</b> 입력 후 Enter</span></div>',
         unsafe_allow_html=True,
     )
-    feedback = st.session_state.pop("quick_feedback", None)
-    if feedback:
-        kind, message = feedback
-        if kind == "success":
-            st.markdown(f'<div class="quick-result success">{esc(message)}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="quick-result error">{esc(message)}</div>', unsafe_allow_html=True)
-
-    with st.container(key="quick_point_entry"):
-        with st.form("quick_points_form", clear_on_submit=True):
-            command = st.text_input(
-                "빠른 포인트 입력",
-                placeholder="RT70",
-                label_visibility="collapsed",
-                max_chars=10,
-            )
-            submitted = st.form_submit_button("기록", type="primary", use_container_width=True)
-    if submitted:
+    payload = quick_point_input(key="festival_chip_command")
+    if payload and payload.get("submission_id") != st.session_state.get("last_chip_submission"):
+        st.session_state["last_chip_submission"] = payload.get("submission_id")
         try:
-            result = service.quick_adjust_points(command, operator)
+            result = service.quick_adjust_points(str(payload.get("command", "")), operator)
             st.session_state["quick_feedback"] = (
                 "success",
                 f"{result.display_code} · {result.name}  {result.delta:+,}P  →  현재 {result.balance:,}P",
             )
         except ValueError as exc:
             st.session_state["quick_feedback"] = ("error", str(exc))
-        st.rerun()
 
-    components.html(
-        """
-        <script>
-        let attempts = 0;
-        const focusQuickInput = setInterval(() => {
-          const input = window.parent.document.querySelector(
-            'input[aria-label="빠른 포인트 입력"]'
-          );
-          attempts += 1;
-          if (input) {
-            input.focus();
-            input.select();
-            clearInterval(focusQuickInput);
-          } else if (attempts > 30) {
-            clearInterval(focusQuickInput);
-          }
-        }, 60);
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+    feedback = st.session_state.get("quick_feedback")
+    if feedback:
+        kind, message = feedback
+        if kind == "success":
+            st.markdown(f'<div class="quick-result success">{esc(message)}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="quick-result error">{esc(message)}</div>', unsafe_allow_html=True)
 
 
 def _checkout_console(service: LoungeService, operator: str) -> None:
