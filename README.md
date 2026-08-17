@@ -5,6 +5,7 @@
 ## 완성된 기능
 
 - 방문자용 입장 키오스크: 이름, 나이, 전화번호, VIP/일반 구분
+- 입장 화면과 다른 붉은 디자인의 독립 퇴장 화면: 두 글자 ID 확인 후 즉시 처리
 - 전화번호 기준 중복 입장 방지와 기억하기 쉬운 영문 대문자 2글자 고유 ID 발급
 - `300RT140` 입력으로 RT 참가자의 사용 칩 300P와 획득 점수 140P를 한 번에 기록
 - `획득 점수 - 사용 칩` 차액을 현재 잔액에 자동 반영
@@ -17,6 +18,8 @@
 - 각 보드의 TOP 3 시상대와 개인정보 보호형 전체 순위표
 - 전화번호 암호화 저장과 공개 화면 개인정보 마스킹
 - 관리자 아이디 없이 공용 비밀번호 한 칸만 사용하는 운영자 콘솔
+- 운영자 콘솔과 다른 전용 비밀번호를 사용하는 방문·체류 영업 분석 화면
+- 시간대별 방문자 수, 입퇴장 현황, VIP·일반 비율, 평균 체류시간, 개인별 입퇴장 정보
 - 보관기간이 지난 개인정보의 되돌릴 수 없는 익명화
 - SQLite 로컬 운영 및 PostgreSQL 클라우드 운영 지원
 
@@ -26,9 +29,11 @@
 
 - 메인: `http://localhost:8501/`
 - 입장 키오스크: `http://메인컴퓨터IP:8501/?view=kiosk`
+- 퇴장 처리: `http://메인컴퓨터IP:8501/?view=checkout`
 - VIP 실시간 현황판: `http://메인컴퓨터IP:8501/?view=board&category=vip`
 - 일반 실시간 현황판: `http://메인컴퓨터IP:8501/?view=board&category=general`
 - 운영자 콘솔: `http://메인컴퓨터IP:8501/?view=admin`
+- 영업 분석: `http://메인컴퓨터IP:8501/?view=analytics`
 
 입장용 컴퓨터와 현황판 컴퓨터를 메인 컴퓨터와 같은 Wi-Fi에 연결한 뒤 해당 주소를 열면 됩니다. 운영자 콘솔은 공용 비밀번호만 입력해 열며 관리자 아이디는 사용하지 않습니다.
 
@@ -39,7 +44,8 @@
 | 장치 | 화면 | 주소 모드 |
 |---|---|---|
 | 입구 노트북/태블릿 | 방문자 입력만 표시 | `?view=kiosk` |
-| 메인 운영 컴퓨터 | 포인트·퇴장·명단 관리 | `?view=admin` |
+| 퇴구 노트북/태블릿 | 두 글자 ID 퇴장 처리 | `?view=checkout` |
+| 메인 운영 컴퓨터 | 전산 기록·영업 분석·명단 관리 | `?view=admin` |
 | VIP 빔프로젝터/TV | VIP 순위·현황 | `?view=board&category=vip` |
 | 일반 빔프로젝터/TV | 일반 순위·현황 | `?view=board&category=general` |
 
@@ -50,8 +56,8 @@
 1. 이 프로젝트를 GitHub 저장소에 올립니다.
 2. Streamlit Community Cloud에서 저장소와 `app.py`를 선택합니다.
 3. 영구 저장을 위해 PostgreSQL 데이터베이스를 준비합니다. 로컬 기본값인 SQLite는 클라우드 앱 재시작 시 데이터가 사라질 수 있어 실제 행사에는 권장하지 않습니다.
-4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `OPERATOR_PASSWORD`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
-5. 배포 후 `?view=kiosk`, `?view=board&category=vip`, `?view=board&category=general`, `?view=admin` 주소를 각 장치에 북마크합니다.
+4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `OPERATOR_PASSWORD`, `ANALYTICS_PASSWORD`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
+5. 배포 후 `?view=kiosk`, `?view=checkout`, `?view=board&category=vip`, `?view=board&category=general`, `?view=admin`, `?view=analytics` 주소를 각 장치에 북마크합니다.
 
 암호화 키는 아래 명령으로 만들 수 있습니다.
 
@@ -59,7 +65,7 @@
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-운영자 공용 비밀번호는 `OPERATOR_PASSWORD` 값으로 지정합니다. 비밀번호와 다른 비밀값은 GitHub 파일에 넣지 않습니다. Streamlit 공식 문서도 `secrets.toml`을 저장소에 커밋하지 않고 클라우드 Secrets 화면에 입력하도록 안내합니다.
+운영자 공용 비밀번호는 `OPERATOR_PASSWORD`, 영업 분석 비밀번호는 `ANALYTICS_PASSWORD` 값으로 지정하며 두 값은 서로 달라야 합니다. 비밀번호와 다른 비밀값은 GitHub 파일에 넣지 않습니다. Streamlit 공식 문서도 `secrets.toml`을 저장소에 커밋하지 않고 클라우드 Secrets 화면에 입력하도록 안내합니다.
 
 ## 운영 체크리스트
 
@@ -68,6 +74,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - 두 글자 ID와 `사용 칩 + ID + 획득 점수` 입력 확인
 - VIP·일반 보드에 해당 참가자만 표시되는지 확인
 - 운영자 공용 비밀번호 확인
+- 영업 분석 비밀번호가 운영자 비밀번호와 다른지 확인
+- 퇴장 화면에서 ID 확인과 최종 퇴장 처리 확인
 - 휴대전화 2대로 동시 입장 테스트
 - 포인트 증감과 퇴장 처리 테스트
 - 메인 컴퓨터 절전 모드 해제
