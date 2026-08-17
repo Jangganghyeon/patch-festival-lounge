@@ -8,6 +8,7 @@
 
 - `data/.field.key`와 `.streamlit/secrets.toml`은 Git에서 제외됩니다.
 - `FIELD_ENCRYPTION_KEY`를 잃으면 기존 전화번호를 복호화할 수 없습니다.
+- 운영자 공용 비밀번호는 Streamlit의 `OPERATOR_PASSWORD` Secret에만 저장합니다.
 - GitHub에는 비밀번호, 데이터베이스 주소, 행사 참가자 CSV를 올리지 않습니다.
 
 ## Operator access
