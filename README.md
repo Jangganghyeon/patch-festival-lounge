@@ -50,7 +50,7 @@
 1. 이 프로젝트를 GitHub 저장소에 올립니다.
 2. Streamlit Community Cloud에서 저장소와 `app.py`를 선택합니다.
 3. 영구 저장을 위해 PostgreSQL 데이터베이스를 준비합니다. 로컬 기본값인 SQLite는 클라우드 앱 재시작 시 데이터가 사라질 수 있어 실제 행사에는 권장하지 않습니다.
-4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
+4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `OPERATOR_PASSWORD`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
 5. 배포 후 `?view=kiosk`, `?view=board&category=vip`, `?view=board&category=general`, `?view=admin` 주소를 각 장치에 북마크합니다.
 
 암호화 키는 아래 명령으로 만들 수 있습니다.
@@ -59,7 +59,7 @@
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-비밀값은 GitHub 파일에 넣지 않습니다. Streamlit 공식 문서도 `secrets.toml`을 저장소에 커밋하지 않고 클라우드 Secrets 화면에 입력하도록 안내합니다.
+운영자 공용 비밀번호는 `OPERATOR_PASSWORD` 값으로 지정합니다. 비밀번호와 다른 비밀값은 GitHub 파일에 넣지 않습니다. Streamlit 공식 문서도 `secrets.toml`을 저장소에 커밋하지 않고 클라우드 Secrets 화면에 입력하도록 안내합니다.
 
 ## 운영 체크리스트
 
