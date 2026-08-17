@@ -63,3 +63,11 @@ def new_display_code(excluded: set[str] | None = None) -> str:
     if not available:
         raise ValueError("사용 가능한 두 글자 참가자 ID 676개가 모두 배정되었습니다.")
     return secrets.choice(available)
+
+
+def new_internal_record_key(excluded: set[str] | None = None) -> str:
+    used = excluded or set()
+    while True:
+        candidate = "~" + secrets.token_hex(3)
+        if candidate not in used:
+            return candidate
