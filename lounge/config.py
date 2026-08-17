@@ -35,6 +35,7 @@ class RuntimeConfig:
     field_encryption_key: str
     timezone: str = "Asia/Seoul"
     operator_password: str = ""
+    analytics_password: str = ""
 
 
 def _load_or_create_local_key() -> str:
@@ -64,4 +65,5 @@ def load_config(database_url: str | None = None) -> RuntimeConfig:
         field_encryption_key=encryption_key,
         timezone=get_setting("APP_TIMEZONE", "Asia/Seoul") or "Asia/Seoul",
         operator_password=get_setting("OPERATOR_PASSWORD", "") or "",
+        analytics_password=get_setting("ANALYTICS_PASSWORD", "") or "",
     )
