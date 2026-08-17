@@ -88,17 +88,6 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
-class AdminUser(Base):
-    __tablename__ = "admin_users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(Text)
-    role: Mapped[str] = mapped_column(String(12), default="admin")
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime)
-
-
 DEFAULT_SETTINGS = {
     "event_name": "PATCH FESTIVAL LOUNGE",
     "event_subtitle": "Software Club Festival · Live Operations",
