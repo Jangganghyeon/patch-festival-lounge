@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import html
+from datetime import timedelta
 
-import pandas as pd
 import streamlit as st
 
 from .quick_input import quick_point_input
@@ -28,7 +28,7 @@ def top_brand(service: LoungeService, eyebrow: str) -> None:
 
 def footer() -> None:
     st.markdown(
-        "<div class='footer-note'>학교 축제 운영 전용 · 포인트는 현금 가치가 없으며 구매·환전·배팅할 수 없습니다.</div>",
+        "<div class='footer-note'>학교 축제 운영 전용 · 칩은 현금 가치가 없으며 행사 내 간식 교환과 게임 점수 기록에만 사용됩니다.</div>",
         unsafe_allow_html=True,
     )
 
@@ -47,7 +47,7 @@ def render_home(service: LoungeService) -> None:
         unsafe_allow_html=True,
     )
 
-    columns = st.columns(3)
+    columns = st.columns(4)
     cards = [
         (
             "01",
@@ -58,13 +58,20 @@ def render_home(service: LoungeService) -> None:
         ),
         (
             "02",
-            "라이브 보드",
-            "현재 입장 인원과 익명화된 포인트 순위를 실시간 표시합니다.",
-            "현황판 열기",
-            "?view=board",
+            "VIP 라이브 보드",
+            "VIP 참가자의 TOP 3와 포인트 순위를 실시간 표시합니다.",
+            "VIP 보드 열기",
+            "?view=board&category=vip",
         ),
         (
             "03",
+            "일반 라이브 보드",
+            "일반 참가자의 TOP 3와 포인트 순위를 실시간 표시합니다.",
+            "일반 보드 열기",
+            "?view=board&category=general",
+        ),
+        (
+            "04",
             "운영자 콘솔",
             "포인트 기록, 퇴장 정산, 명단 및 데이터를 관리합니다.",
             "관리 화면 열기",
@@ -199,7 +206,7 @@ def leaderboard_html(rows: list[dict]) -> str:
     return "<div class='panel-card'>" + "".join(body) + "</div>"
 
 
-def podium_html(rows: list[dict]) -> str:
+def podium_html(rows: list[dict], group_label: str) -> str:
     ranked = {place: rows[place - 1] if len(rows) >= place else None for place in (1, 2, 3)}
 
     def podium_place(place: int) -> str:
@@ -232,7 +239,7 @@ def podium_html(rows: list[dict]) -> str:
         '<div class="podium-sparkle sparkle-2">✧</div>'
         '<div class="podium-sparkle sparkle-3">✦</div>'
         '<div class="podium-sparkle sparkle-4">✧</div>'
-        '<div class="podium-title"><span>TOP 3</span> · LIVE RANKING</div>'
+        f'<div class="podium-title"><span>TOP 3</span> · {esc(group_label)} LIVE RANKING</div>'
         '<div class="podium-grid">'
         + podium_place(2)
         + podium_place(1)
@@ -242,25 +249,35 @@ def podium_html(rows: list[dict]) -> str:
 
 
 def render_board(service: LoungeService) -> None:
-    top_brand(service, "LIVE OPERATIONS BOARD")
+    category = str(st.query_params.get("category", "general")).lower()
+    if category not in {"vip", "general"}:
+        category = "general"
+    group_label = "VIP" if category == "vip" else "GENERAL"
+    group_label_ko = "VIP" if category == "vip" else "일반 손님"
+
+    top_brand(service, f"{group_label} LIVE OPERATIONS BOARD")
+    st.markdown(f"## {group_label_ko} 라이브 보드")
     st.markdown(
         "<div style='color:#a5b6ae'><span class='live-dot'></span>2초마다 자동 갱신</div>",
         unsafe_allow_html=True,
     )
 
-    @st.fragment(run_every="2s")
+    @st.fragment(run_every=timedelta(seconds=2))
     def live_board() -> None:
-        stats = service.dashboard()
+        leaderboard = service.leaderboard(category)
         podium_column, ranking_column = st.columns([1.35, 0.65], gap="large", vertical_alignment="top")
         with podium_column:
             with st.container(key="board_podium"):
-                st.markdown(podium_html(stats["leaderboard"][:3]), unsafe_allow_html=True)
+                st.markdown(
+                    podium_html(leaderboard[:3], group_label),
+                    unsafe_allow_html=True,
+                )
         with ranking_column:
             with st.container(key="board_ranking"):
                 st.markdown(
-                    "<div class='ranking-heading'><span>ALL PLAYERS</span>"
+                    f"<div class='ranking-heading'><span>{esc(group_label)} PLAYERS</span>"
                     "<strong>현재 포인트 순위</strong></div>"
-                    + leaderboard_html(stats["leaderboard"]),
+                    + leaderboard_html(leaderboard),
                     unsafe_allow_html=True,
                 )
 
@@ -306,6 +323,10 @@ def participant_picker(service: LoungeService, key: str, active_only: bool = Tru
 
 def render_admin(service: LoungeService) -> None:
     top_brand(service, "OPERATIONS CONSOLE")
+    if not _operator_password_gate(service):
+        footer()
+        return
+
     operator = "festival_staff"
     panel = str(st.query_params.get("panel", "menu")).lower()
 
@@ -357,10 +378,38 @@ def render_admin(service: LoungeService) -> None:
     footer()
 
 
+def _operator_password_gate(service: LoungeService) -> bool:
+    if st.session_state.get("operator_authenticated") is True:
+        return True
+
+    st.markdown("## 운영자 콘솔")
+    with st.container(key="operator_gate"):
+        st.markdown(
+            '<div class="operator-gate-copy">운영진 공용 비밀번호를 입력하면 바로 콘솔이 열립니다.</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("operator_password_form", clear_on_submit=True):
+            password = st.text_input(
+                "운영자 비밀번호",
+                type="password",
+                placeholder="비밀번호 입력",
+                autocomplete="current-password",
+            )
+            submitted = st.form_submit_button(
+                "운영자 콘솔 열기", type="primary", use_container_width=True
+            )
+        if submitted:
+            if service.verify_operator_password(password):
+                st.session_state["operator_authenticated"] = True
+                st.rerun()
+            st.error("비밀번호가 올바르지 않습니다.")
+    return False
+
+
 def _quick_points_console(service: LoungeService, operator: str) -> None:
     st.markdown(
-        '<div class="quick-guide"><strong>두 글자 ID + 받은 포인트</strong>'
-        '<span>입력창은 자동으로 선택됩니다. 예: <b>RT70</b> 입력 후 Enter</span></div>',
+        '<div class="quick-guide"><strong>사용 칩 + 두 글자 ID + 획득 점수</strong>'
+        '<span>입력창은 자동으로 선택됩니다. 예: <b>300RT140</b> 입력 후 Enter</span></div>',
         unsafe_allow_html=True,
     )
     payload = quick_point_input(key="festival_chip_command")
@@ -370,7 +419,8 @@ def _quick_points_console(service: LoungeService, operator: str) -> None:
             result = service.quick_adjust_points(str(payload.get("command", "")), operator)
             st.session_state["quick_feedback"] = (
                 "success",
-                f"{result.display_code} · {result.name}  {result.delta:+,}P  →  현재 {result.balance:,}P",
+                f"{result.display_code} · {result.name}  사용 {result.spent:,}P · "
+                f"획득 {result.earned:,}P · 변동 {result.delta:+,}P  →  현재 {result.balance:,}P",
             )
         except ValueError as exc:
             st.session_state["quick_feedback"] = ("error", str(exc))
@@ -414,19 +464,17 @@ def _participant_list(service: LoungeService, operator: str) -> None:
     rows = service.search_participants(search, active_only=status == "입장 중", limit=500)
     if status == "퇴장":
         rows = [row for row in rows if row["status"] == "exited"]
-    table = pd.DataFrame(
-        [
-            {
-                "ID": row["code"],
-                "이름": row["name"],
-                "상태": "입장 중" if row["status"] == "active" else "퇴장",
-                "포인트": row["points"],
-                "입장": service.format_time(row["checked_in_at"], include_date=True),
-                "퇴장": service.format_time(row["checked_out_at"], include_date=True),
-            }
-            for row in rows
-        ]
-    )
+    table = [
+        {
+            "ID": row["code"],
+            "이름": row["name"],
+            "상태": "입장 중" if row["status"] == "active" else "퇴장",
+            "포인트": row["points"],
+            "입장": service.format_time(row["checked_in_at"], include_date=True),
+            "퇴장": service.format_time(row["checked_out_at"], include_date=True),
+        }
+        for row in rows
+    ]
     st.dataframe(table, hide_index=True, use_container_width=True, height=420)
     st.caption(f"검색 결과 {len(rows)}명")
 
