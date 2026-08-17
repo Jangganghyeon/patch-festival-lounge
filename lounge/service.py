@@ -132,6 +132,17 @@ class LoungeService:
         expected = self.config.analytics_password
         return not self.analytics_password_issue() and hmac.compare_digest(password or "", expected)
 
+    def reset_password_issue(self) -> str:
+        if not self.config.reset_password:
+            return "RESET_PASSWORD가 설정되지 않았습니다."
+        if self.config.reset_password == self.config.operator_password:
+            return "초기화 비밀번호는 운영자 콘솔 비밀번호와 다르게 설정해야 합니다."
+        return ""
+
+    def verify_reset_password(self, password: str) -> bool:
+        expected = self.config.reset_password
+        return not self.reset_password_issue() and hmac.compare_digest(password or "", expected)
+
     def check_in(
         self,
         *,
