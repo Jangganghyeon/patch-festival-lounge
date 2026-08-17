@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from cryptography.fernet import Fernet
 from streamlit.testing.v1 import AppTest
 
@@ -10,10 +11,14 @@ from lounge.database import Participant, create_db
 from lounge.service import LoungeService
 
 
+@pytest.fixture(autouse=True)
+def operator_password(monkeypatch):
+    monkeypatch.setenv("OPERATOR_PASSWORD", "test-operator-password")
+
+
 def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'ui.db'}")
     monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
-    monkeypatch.setenv("INITIAL_SETUP_CODE", "SETUP123")
 
     cases = [
         ("home", "입장 등록"),
@@ -36,7 +41,6 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
 def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'kiosk.db'}")
     monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
-    monkeypatch.setenv("INITIAL_SETUP_CODE", "SETUP123")
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "kiosk"
@@ -60,11 +64,10 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     encryption_key = Fernet.generate_key().decode("ascii")
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("FIELD_ENCRYPTION_KEY", encryption_key)
-    monkeypatch.setenv("INITIAL_SETUP_CODE", "SETUP123")
     config = RuntimeConfig(
         database_url=database_url,
         field_encryption_key=encryption_key,
-        initial_setup_code="SETUP123",
+        operator_password="test-operator-password",
     )
     _engine, factory = create_db(config)
     service = LoungeService(factory, config)
@@ -82,10 +85,11 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "board"
+    app.query_params["category"] = "general"
     app.run(timeout=20)
     rendered = "\n".join(element.value for element in app.markdown)
     assert len(app.exception) == 0
-    assert '<span>TOP 3</span> · LIVE RANKING' in rendered
+    assert '<span>TOP 3</span> · GENERAL LIVE RANKING' in rendered
     assert 'class="winner-crown"' in rendered
     assert 'class="podium-sparkle sparkle-1"' in rendered
     assert "class='ranking-heading'" in rendered
@@ -97,22 +101,55 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     assert "최근 입장" not in rendered
 
 
+def test_home_has_separate_vip_and_general_boards(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'home.db'}")
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "home"
+    app.run(timeout=20)
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "VIP 라이브 보드" in rendered
+    assert "일반 라이브 보드" in rendered
+
+
+def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'gate.db'}")
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "admin"
+    app.run(timeout=20)
+    assert len(app.text_input) == 1
+    assert app.text_input[0].label == "운영자 비밀번호"
+
+    app.text_input[0].input("test-operator-password")
+    app.button[0].click().run(timeout=20)
+    assert len(app.exception) == 0
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "전산 칩 관리" in rendered
+    assert len(app.text_input) == 0
+
+
 def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'admin.db'}"
     encryption_key = Fernet.generate_key().decode("ascii")
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("FIELD_ENCRYPTION_KEY", encryption_key)
-    monkeypatch.setenv("INITIAL_SETUP_CODE", "SETUP123")
     config = RuntimeConfig(
         database_url=database_url,
         field_encryption_key=encryption_key,
-        initial_setup_code="SETUP123",
+        operator_password="test-operator-password",
     )
     create_db(config)
+    from lounge import views
+
+    monkeypatch.setattr(views, "quick_point_input", lambda *, key: None)
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "admin"
     app.query_params["panel"] = "chips"
+    app.session_state["operator_authenticated"] = True
     app.run(timeout=20)
     assert len(app.exception) == 0
     rendered = "\n".join(element.value for element in app.markdown)

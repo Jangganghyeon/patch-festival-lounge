@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import base64
 import hashlib
-import hmac
 import re
 import secrets
 
@@ -48,39 +46,6 @@ def decrypt_text(value: str, key: str) -> str:
         return Fernet(key.encode("ascii")).decrypt(value.encode("ascii")).decode("utf-8")
     except (InvalidToken, ValueError) as exc:
         raise ValueError("저장된 개인정보를 복호화할 수 없습니다.") from exc
-
-
-def hash_password(password: str) -> str:
-    if len(password) < 8:
-        raise ValueError("비밀번호는 8자 이상이어야 합니다.")
-    salt = secrets.token_bytes(16)
-    derived = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32)
-    return (
-        "scrypt$16384$8$1$"
-        + base64.urlsafe_b64encode(salt).decode()
-        + "$"
-        + base64.urlsafe_b64encode(derived).decode()
-    )
-
-
-def verify_password(password: str, encoded: str) -> bool:
-    try:
-        algorithm, n, r, p, salt_b64, digest_b64 = encoded.split("$")
-        if algorithm != "scrypt":
-            return False
-        salt = base64.urlsafe_b64decode(salt_b64.encode())
-        expected = base64.urlsafe_b64decode(digest_b64.encode())
-        actual = hashlib.scrypt(
-            password.encode("utf-8"),
-            salt=salt,
-            n=int(n),
-            r=int(r),
-            p=int(p),
-            dklen=len(expected),
-        )
-        return hmac.compare_digest(actual, expected)
-    except (ValueError, TypeError):
-        return False
 
 
 def is_display_code(value: str) -> bool:
