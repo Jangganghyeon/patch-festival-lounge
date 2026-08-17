@@ -14,6 +14,7 @@ def service(tmp_path):
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         field_encryption_key=Fernet.generate_key().decode("ascii"),
         operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
     )
     _engine, factory = create_db(config)
     return LoungeService(factory, config)
@@ -162,3 +163,24 @@ def test_export_is_utf8_bom_csv(service: LoungeService):
 def test_operator_uses_only_shared_password(service: LoungeService):
     assert service.verify_operator_password("test-operator-password") is True
     assert service.verify_operator_password("wrong") is False
+
+
+def test_analytics_uses_a_different_password(service: LoungeService):
+    assert service.analytics_password_issue() == ""
+    assert service.verify_analytics_password("test-analytics-password") is True
+    assert service.verify_analytics_password("test-operator-password") is False
+
+
+def test_visit_analytics_tracks_attendance_without_point_history(service: LoungeService):
+    general = check_in(service, phone="010-5555-5555", name="일반방문")
+    check_in(service, phone="010-6666-6666", name="우대방문", category="vip")
+    service.check_out(general.participant_id, 0, "", "checkout_station")
+
+    stats = service.visit_analytics()
+    assert stats["total"] == 2
+    assert stats["active"] == 1
+    assert stats["exited"] == 1
+    assert stats["general"] == 1
+    assert stats["vip"] == 1
+    assert sum(row["count"] for row in stats["hourly"]) == 2
+    assert all("points" not in visit for visit in stats["visits"])
