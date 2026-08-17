@@ -270,6 +270,30 @@ class LoungeService:
                 raise ValueError(f"현재 입장 중인 {normalized} 참가자를 찾을 수 없습니다.")
             return self._participant_dict(row)
 
+    def verify_checkout_identity(self, *, name: str, phone: str, code: str) -> dict[str, Any]:
+        normalized_name = " ".join((name or "").strip().split())
+        normalized_phone = validate_phone(phone)
+        normalized_code = (code or "").strip().upper()
+        if not 2 <= len(normalized_name) <= 40:
+            raise ValueError("이름을 정확히 입력해 주세요.")
+        if not re.fullmatch(r"[A-Z]{2}", normalized_code):
+            raise ValueError("영문 두 글자 ID를 입력해 주세요.")
+
+        with self.sessions() as session:
+            row = session.scalar(
+                select(Participant).where(
+                    and_(
+                        Participant.name == normalized_name,
+                        Participant.phone_hash == phone_digest(normalized_phone),
+                        Participant.display_code == normalized_code,
+                        Participant.status == "active",
+                    )
+                )
+            )
+            if not row:
+                raise ValueError("입력 정보와 일치하는 현재 입장 기록을 찾을 수 없습니다.")
+            return self._participant_dict(row)
+
     def adjust_points(
         self,
         participant_id: int,
@@ -502,6 +526,10 @@ class LoungeService:
                 {
                     "name": row.name,
                     "code": row.display_code,
+                    "age": row.age,
+                    "phone": mask_phone(
+                        decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
+                    ),
                     "category": row.category,
                     "status": row.status,
                     "checked_in": self.format_time(row.checked_in_at),
