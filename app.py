@@ -8,7 +8,15 @@ from lounge.config import RuntimeConfig, load_config
 from lounge.database import create_db
 from lounge.service import LoungeService
 from lounge.styles import GLOBAL_CSS
-from lounge.views import footer, render_admin, render_board, render_home, render_kiosk
+from lounge.views import (
+    footer,
+    render_admin,
+    render_analytics,
+    render_board,
+    render_checkout,
+    render_home,
+    render_kiosk,
+)
 
 st.set_page_config(
     page_title="PATCH Festival Lounge",
@@ -40,10 +48,14 @@ view = str(st.query_params.get("view", "home")).lower()
 try:
     if view == "kiosk":
         render_kiosk(service)
+    elif view == "checkout":
+        render_checkout(service)
     elif view == "board":
         render_board(service)
     elif view == "admin":
         render_admin(service)
+    elif view == "analytics":
+        render_analytics(service)
     else:
         render_home(service)
 except Exception:
