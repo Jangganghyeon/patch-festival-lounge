@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from threading import RLock
 
@@ -13,13 +14,15 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    inspect,
     select,
+    text,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from .config import RuntimeConfig, load_config
-from .security import is_display_code, new_display_code
+from .security import is_display_code, new_display_code, new_internal_record_key
 
 DB_WRITE_LOCK = RLock()
 
@@ -32,7 +35,8 @@ class Participant(Base):
     __tablename__ = "participants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    display_code: Mapped[str] = mapped_column(String(8), unique=True, index=True)
+    legacy_key: Mapped[str] = mapped_column("display_code", String(8), unique=True, index=True)
+    active_code: Mapped[str | None] = mapped_column(String(2), nullable=True, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(40), index=True)
     age: Mapped[int] = mapped_column(Integer)
     phone_encrypted: Mapped[str] = mapped_column(Text)
@@ -122,15 +126,57 @@ def create_db(config: RuntimeConfig | None = None) -> tuple[Engine, sessionmaker
             cursor.close()
 
     Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("participants")}
+        if "active_code" not in columns:
+            connection.execute(text("ALTER TABLE participants ADD COLUMN active_code VARCHAR(2)"))
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_participants_active_code "
+                "ON participants (active_code)"
+            )
+        )
     factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     with factory.begin() as session:
         for key, value in DEFAULT_SETTINGS.items():
             if session.get(AppSetting, key) is None:
                 session.add(AppSetting(key=key, value=value))
         participants = session.scalars(select(Participant).order_by(Participant.id)).all()
-        used_codes = {row.display_code for row in participants if is_display_code(row.display_code)}
+        used_codes = {
+            row.active_code for row in participants if is_display_code(row.active_code or "")
+        }
+        used_keys = {row.legacy_key for row in participants}
         for participant in participants:
-            if not is_display_code(participant.display_code):
-                participant.display_code = new_display_code(used_codes)
-                used_codes.add(participant.display_code)
+            if participant.status == "active":
+                if not is_display_code(participant.active_code or ""):
+                    legacy_code = participant.legacy_key
+                    if is_display_code(legacy_code) and legacy_code not in used_codes:
+                        participant.active_code = legacy_code
+                    else:
+                        participant.active_code = new_display_code(used_codes)
+                    used_codes.add(participant.active_code)
+            else:
+                participant.active_code = None
+
+            if not participant.legacy_key.startswith("~"):
+                replacement = new_internal_record_key(used_keys)
+                used_keys.add(replacement)
+                participant.legacy_key = replacement
+
+        for log in session.scalars(select(AuditLog)).all():
+            try:
+                details = json.loads(log.details or "{}")
+            except json.JSONDecodeError:
+                details = {}
+            if isinstance(details, dict):
+                details.pop("code", None)
+                details.pop("command", None)
+                log.details = json.dumps(details, ensure_ascii=False)
+
+        for transaction in session.scalars(
+            select(PointTransaction).where(
+                PointTransaction.activity == "칩 사용·게임 점수 기록"
+            )
+        ).all():
+            transaction.note = " · ".join(transaction.note.split(" · ")[:2])
     return engine, factory
