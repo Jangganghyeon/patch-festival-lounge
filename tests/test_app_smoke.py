@@ -60,7 +60,14 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
 
     assert len(app.exception) == 0
     assert any("ADMISSION COMPLETE" in element.value for element in app.markdown)
+    assert any("자동 전환됩니다" in element.value for element in app.caption)
     assert len(app.get("link_button")) == 0
+
+    app.session_state["last_ticket_expires_at"] = 0.0
+    app.run(timeout=20)
+    kiosk_markup = "\n".join(element.value for element in app.markdown)
+    assert "ADMISSION COMPLETE" not in kiosk_markup
+    assert "01 · GUEST PROFILE" in kiosk_markup
 
 
 def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import math
+import time
 from datetime import timedelta
 
 import streamlit as st
@@ -228,6 +230,8 @@ def render_kiosk(service: LoungeService) -> None:
 
     if st.session_state.get("last_ticket"):
         ticket = st.session_state["last_ticket"]
+        if "last_ticket_expires_at" not in st.session_state:
+            st.session_state["last_ticket_expires_at"] = time.monotonic() + 10
         st.markdown(
             f"""
             <div class="ticket-card">
@@ -243,8 +247,21 @@ def render_kiosk(service: LoungeService) -> None:
             unsafe_allow_html=True,
         )
         st.warning(f"중요: 나의 ID는 {ticket['code']}입니다. 화면을 닫기 전에 반드시 기억해 주세요.")
+
+        @st.fragment(run_every=timedelta(seconds=1))
+        def ticket_auto_advance() -> None:
+            expires_at = float(st.session_state.get("last_ticket_expires_at", 0))
+            remaining = max(0, math.ceil(expires_at - time.monotonic()))
+            if remaining == 0:
+                st.session_state.pop("last_ticket", None)
+                st.session_state.pop("last_ticket_expires_at", None)
+                st.rerun()
+            st.caption(f"{remaining}초 후 다음 방문자 등록 화면으로 자동 전환됩니다.")
+
+        ticket_auto_advance()
         if st.button("다음 방문자 등록", type="primary", use_container_width=True):
-            del st.session_state["last_ticket"]
+            st.session_state.pop("last_ticket", None)
+            st.session_state.pop("last_ticket_expires_at", None)
             st.rerun()
         footer()
         return
@@ -297,6 +314,7 @@ def render_kiosk(service: LoungeService) -> None:
                 "code": result.display_code,
                 "points": result.starting_points,
             }
+            st.session_state["last_ticket_expires_at"] = time.monotonic() + 10
             st.rerun()
         except ValueError as exc:
             st.error(str(exc))
