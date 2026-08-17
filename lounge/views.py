@@ -441,6 +441,56 @@ def participant_picker(service: LoungeService, key: str, active_only: bool = Tru
     return selected
 
 
+def _open_admin_panel(panel: str) -> None:
+    st.query_params["view"] = "admin"
+    if panel == "menu":
+        if "panel" in st.query_params:
+            del st.query_params["panel"]
+    else:
+        st.query_params["panel"] = panel
+    st.rerun()
+
+
+def _admin_back_button(key: str) -> None:
+    if st.button("← 운영자 메뉴로 돌아가기", key=key):
+        _open_admin_panel("menu")
+
+
+def _public_display_reset_panel(service: LoungeService, operator: str) -> None:
+    st.markdown("## 라운지·라이브 보드 초기화")
+    st.markdown(
+        """
+        <div class="panel-card">
+          <strong>기록을 삭제하지 않는 표시 초기화</strong>
+          <div class="mode-copy" style="margin-top:.55rem">
+            방문 명단·입퇴장 기록·운영 기록은 그대로 보존됩니다.<br>
+            초기화 이전 방문자만 라운지 현황과 두 라이브 보드에서 숨겨집니다.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    last_reset = service.public_display_reset_at()
+    if last_reset:
+        st.caption(f"최근 초기화: {service.format_time(last_reset, include_date=True)}")
+    else:
+        st.caption("아직 표시 초기화를 실행하지 않았습니다.")
+
+    with st.form("public_display_reset_form"):
+        confirmed = st.checkbox("운영자 기록은 유지되고 공개 화면 표시만 초기화됨을 확인했습니다.")
+        submitted = st.form_submit_button(
+            "라운지·라이브 보드 표시 초기화",
+            type="primary",
+            use_container_width=True,
+        )
+    if submitted:
+        if not confirmed:
+            st.warning("초기화 범위를 확인한 뒤 체크해 주세요.")
+        else:
+            service.reset_public_display(operator)
+            st.success("표시를 초기화했습니다. 운영자 콘솔의 기존 기록은 그대로 유지됩니다.")
+
+
 def render_admin(service: LoungeService) -> None:
     top_brand(service, "OPERATIONS CONSOLE")
     if not _operator_password_gate(service):
@@ -451,47 +501,70 @@ def render_admin(service: LoungeService) -> None:
     panel = str(st.query_params.get("panel", "menu")).lower()
 
     if panel == "chips":
+        _admin_back_button("admin_back_from_chips")
         st.markdown("## 전산 칩 관리")
         _quick_points_console(service, operator)
-        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
+    elif panel == "analytics":
+        _admin_back_button("admin_back_from_analytics")
+        _render_analytics_panel(service)
     elif panel == "visitors":
+        _admin_back_button("admin_back_from_visitors")
         _participant_list(service, operator)
-        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
+    elif panel == "reset":
+        _admin_back_button("admin_back_from_reset")
+        _public_display_reset_panel(service, operator)
     else:
         st.markdown("## 운영자 콘솔")
-        columns = st.columns(3)
         menu_items = [
             (
                 "01",
                 "전산 칩 관리",
                 "두 글자 ID와 포인트를 입력해 가장 빠르게 기록합니다.",
                 "전산 칩 관리 열기",
-                "?view=admin&panel=chips",
+                "chips",
             ),
             (
                 "02",
                 "영업 분석",
                 "오늘의 방문·체류·입퇴장 흐름을 한눈에 확인합니다.",
                 "영업 분석 열기",
-                "?view=analytics",
+                "analytics",
             ),
             (
                 "03",
                 "방문 명단",
                 "현재 입장·퇴장 상태와 포인트를 확인합니다.",
                 "방문 명단 열기",
-                "?view=admin&panel=visitors",
+                "visitors",
+            ),
+            (
+                "04",
+                "화면 표시 초기화",
+                "기록은 보존하고 라운지와 라이브 보드 표시만 새로 시작합니다.",
+                "초기화 기능 열기",
+                "reset",
             ),
         ]
-        for column, (number, title, copy, label, href) in zip(columns, menu_items, strict=True):
-            with column:
-                st.markdown(
-                    f'<div class="mode-card"><div class="mode-num">{number}</div>'
-                    f'<div class="mode-title">{esc(title)}</div>'
-                    f'<div class="mode-copy">{esc(copy)}</div></div>',
-                    unsafe_allow_html=True,
-                )
-                st.link_button(label, href, use_container_width=True)
+        for start in range(0, len(menu_items), 2):
+            columns = st.columns(2, gap="large")
+            for column, (number, title, copy, label, target) in zip(
+                columns, menu_items[start : start + 2], strict=True
+            ):
+                with column:
+                    st.markdown(
+                        f'<div class="mode-card"><div class="mode-num">{number}</div>'
+                        f'<div class="mode-title">{esc(title)}</div>'
+                        f'<div class="mode-copy">{esc(copy)}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(
+                        label,
+                        key=f"admin_open_{target}",
+                        use_container_width=True,
+                    ):
+                        _open_admin_panel(target)
+            if start == 0:
+                st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
     footer()
 
 
@@ -616,10 +689,8 @@ def _visit_details_html(visits: list[dict]) -> str:
     return '<div class="analytics-panel visit-list">' + "".join(rows) + "</div>"
 
 
-def render_analytics(service: LoungeService) -> None:
-    top_brand(service, "VISITOR OPERATIONS ANALYTICS")
+def _render_analytics_panel(service: LoungeService) -> None:
     if not _analytics_password_gate(service):
-        footer()
         return
 
     st.markdown("## 영업 분석")
@@ -654,8 +725,13 @@ def render_analytics(service: LoungeService) -> None:
         st.markdown(_visit_details_html(stats["visits"]), unsafe_allow_html=True)
 
     analytics_live()
-    st.link_button("운영자 콘솔로 돌아가기", "?view=admin")
-    footer()
+
+
+def render_analytics(service: LoungeService) -> None:
+    """Keep the old analytics URL compatible while routing it through the console gate."""
+    st.query_params["view"] = "admin"
+    st.query_params["panel"] = "analytics"
+    render_admin(service)
 
 
 def _quick_points_console(service: LoungeService, operator: str) -> None:
