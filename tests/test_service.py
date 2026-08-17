@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from cryptography.fernet import Fernet
 
 from lounge.config import RuntimeConfig
-from lounge.database import Participant, create_db
+from lounge.database import AuditLog, Participant, PointTransaction, create_db
 from lounge.service import LoungeService
 
 
@@ -32,6 +34,52 @@ def check_in(service: LoungeService, phone: str = "010-1234-5678", **overrides):
     }
     values.update(overrides)
     return service.check_in(**values)
+
+
+def test_existing_database_migrates_historical_codes_to_temporary_field(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(database_path)
+    connection.executescript(
+        """
+        CREATE TABLE participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            display_code VARCHAR(8) NOT NULL UNIQUE,
+            name VARCHAR(40) NOT NULL,
+            age INTEGER NOT NULL,
+            phone_encrypted TEXT NOT NULL,
+            phone_hash VARCHAR(64) NOT NULL,
+            phone_last4 VARCHAR(4) NOT NULL,
+            category VARCHAR(12) NOT NULL,
+            status VARCHAR(12) NOT NULL,
+            current_points INTEGER NOT NULL,
+            final_points INTEGER,
+            leaderboard_opt_in BOOLEAN NOT NULL,
+            privacy_consent BOOLEAN NOT NULL,
+            checked_in_at DATETIME NOT NULL,
+            checked_out_at DATETIME,
+            exit_note VARCHAR(200) NOT NULL
+        );
+        INSERT INTO participants VALUES
+            (1, 'AA', '입장중', 17, 'unused', 'hash1', '0001', 'general', 'active',
+             0, NULL, 1, 1, '2026-08-17 00:00:00', NULL, ''),
+            (2, 'BB', '퇴장함', 17, 'unused', 'hash2', '0002', 'general', 'exited',
+             0, 0, 1, 1, '2026-08-17 00:01:00', '2026-08-17 00:02:00', '');
+        """
+    )
+    connection.close()
+    config = RuntimeConfig(
+        database_url=f"sqlite:///{database_path}",
+        field_encryption_key=Fernet.generate_key().decode("ascii"),
+    )
+
+    _engine, factory = create_db(config)
+    with factory() as session:
+        active = session.get(Participant, 1)
+        exited = session.get(Participant, 2)
+        assert active is not None and active.active_code == "AA"
+        assert active.legacy_key != "AA"
+        assert exited is not None and exited.active_code is None
+        assert exited.legacy_key != "BB"
 
 
 def test_full_visit_flow(service: LoungeService):
@@ -98,7 +146,8 @@ def test_legacy_codes_are_migrated_to_two_letters(service: LoungeService):
     participant = check_in(service)
     with service.sessions.begin() as session:
         row = session.get(Participant, participant.participant_id)
-        row.display_code = "ABC123"
+        row.legacy_key = "ABC123"
+        row.active_code = None
 
     _engine, factory = create_db(service.config)
     migrated = LoungeService(factory, service.config).get_participant(participant.participant_id)
@@ -118,6 +167,25 @@ def test_same_phone_can_reenter_after_checkout(service: LoungeService):
     service.check_out(first.participant_id, 0, "", "operator")
     second = check_in(service)
     assert second.participant_id != first.participant_id
+
+
+def test_temporary_code_is_released_on_checkout_and_can_be_reused(
+    service: LoungeService, monkeypatch
+):
+    monkeypatch.setattr("lounge.security.secrets.choice", lambda choices: choices[0])
+    first = check_in(service, phone="010-7000-0001", name="첫방문")
+    assert first.display_code == "AA"
+
+    service.check_out(first.participant_id, 0, "", "operator")
+    exited = service.get_participant(first.participant_id)
+    assert exited["code"] == ""
+    with service.sessions() as session:
+        row = session.get(Participant, first.participant_id)
+        assert row.active_code is None
+        assert row.legacy_key != first.display_code
+
+    second = check_in(service, phone="010-7000-0002", name="다음방문")
+    assert second.display_code == first.display_code
 
 
 def test_checkout_identity_requires_matching_name_phone_and_code(service: LoungeService):
@@ -196,10 +264,34 @@ def test_public_display_reset_hides_old_visitors_without_deleting_records(
 
 
 def test_export_is_utf8_bom_csv(service: LoungeService):
-    check_in(service)
+    participant = check_in(service)
     payload = service.export_participants_csv()
     assert payload.startswith(b"\xef\xbb\xbf")
     assert "홍길동" in payload.decode("utf-8-sig")
+    assert participant.display_code not in payload.decode("utf-8-sig")
+    assert "입장코드" not in payload.decode("utf-8-sig")
+
+
+def test_stored_logs_and_transaction_exports_do_not_keep_temporary_codes(
+    service: LoungeService,
+):
+    participant = check_in(service)
+    service.quick_adjust_points(f"0{participant.display_code}5", "operator")
+    service.check_out(participant.participant_id, 5, "", "operator")
+
+    _engine, factory = create_db(service.config)
+    with factory() as session:
+        assert all(
+            participant.display_code not in (log.details or "")
+            for log in session.query(AuditLog).all()
+        )
+        assert all(
+            participant.display_code not in (transaction.note or "")
+            for transaction in session.query(PointTransaction).all()
+        )
+    assert participant.display_code not in LoungeService(
+        factory, service.config
+    ).export_transactions_csv().decode("utf-8-sig")
 
 
 def test_operator_uses_only_shared_password(service: LoungeService):
@@ -231,7 +323,8 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     assert stats["general"] == 1
     assert stats["vip"] == 1
     assert sum(row["count"] for row in stats["hourly"]) == 2
-    general_visit = next(visit for visit in stats["visits"] if visit["code"] == general.display_code)
+    general_visit = next(visit for visit in stats["visits"] if visit["name"] == "일반방문")
     assert general_visit["age"] == 17
     assert general_visit["phone"] == "010-****-5555"
+    assert general_visit["code"] == ""
     assert all("points" not in visit for visit in stats["visits"])
