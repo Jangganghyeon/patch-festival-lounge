@@ -47,38 +47,64 @@ def render_home(service: LoungeService) -> None:
         unsafe_allow_html=True,
     )
 
-    columns = st.columns(4)
-    cards = [
+    primary_columns = st.columns(2, gap="large")
+    primary_cards = [
         (
             "01",
             "입장 등록",
             "방문자가 직접 이름·나이·연락처·참가 유형을 입력합니다.",
             "입장 화면 열기",
             "?view=kiosk",
+            "entry-mode-card",
         ),
         (
             "02",
+            "퇴장 처리",
+            "두 글자 ID를 확인하고 빠르게 퇴장을 완료합니다.",
+            "퇴장 화면 열기",
+            "?view=checkout",
+            "checkout-mode-card",
+        ),
+    ]
+    for col, (number, title, copy, label, href, card_class) in zip(
+        primary_columns, primary_cards, strict=True
+    ):
+        with col:
+            st.markdown(
+                f"<div class='mode-card {card_class}'><div class='mode-num'>{number}</div>"
+                f"<div class='mode-title'>{esc(title)}</div><div class='mode-copy'>{esc(copy)}</div></div>",
+                unsafe_allow_html=True,
+            )
+            st.link_button(label, href, use_container_width=True)
+
+    st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+    secondary_columns = st.columns(3)
+    secondary_cards = [
+        (
+            "03",
             "VIP 라이브 보드",
             "VIP 참가자의 TOP 3와 포인트 순위를 실시간 표시합니다.",
             "VIP 보드 열기",
             "?view=board&category=vip",
         ),
         (
-            "03",
+            "04",
             "일반 라이브 보드",
             "일반 참가자의 TOP 3와 포인트 순위를 실시간 표시합니다.",
             "일반 보드 열기",
             "?view=board&category=general",
         ),
         (
-            "04",
+            "05",
             "운영자 콘솔",
-            "포인트 기록, 퇴장 정산, 명단 및 데이터를 관리합니다.",
+            "전산 기록, 영업 분석, 방문 명단을 관리합니다.",
             "관리 화면 열기",
             "?view=admin",
         ),
     ]
-    for col, (number, title, copy, label, href) in zip(columns, cards, strict=True):
+    for col, (number, title, copy, label, href) in zip(
+        secondary_columns, secondary_cards, strict=True
+    ):
         with col:
             st.markdown(
                 f"<div class='mode-card'><div class='mode-num'>{number}</div><div class='mode-title'>{esc(title)}</div><div class='mode-copy'>{esc(copy)}</div></div>",
@@ -91,7 +117,7 @@ def render_home(service: LoungeService) -> None:
     st.markdown(
         metric_cards(
             [
-                ("오늘 누적 입장", stats["total"]),
+                ("누적 입장", stats["total"]),
                 ("현재 라운지", stats["active"]),
                 ("퇴장 완료", stats["exited"]),
                 ("운영 중 포인트", f"{stats['active_points']:,}"),
@@ -99,6 +125,86 @@ def render_home(service: LoungeService) -> None:
         ),
         unsafe_allow_html=True,
     )
+    footer()
+
+
+def render_checkout(service: LoungeService) -> None:
+    top_brand(service, "GUEST CHECK-OUT")
+    st.markdown(
+        """
+        <div class="checkout-hero">
+          <div class="checkout-kicker">EXIT ONLY · 퇴장 전용 화면</div>
+          <div class="checkout-title">퇴장 처리</div>
+          <div class="checkout-copy">입장 등록 화면이 아닙니다. 발급받은 영문 두 글자 ID만 입력해 주세요.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.get("checkout_complete"):
+        completed = st.session_state["checkout_complete"]
+        st.success(f"{completed['code']} · {completed['name']}님의 퇴장이 완료되었습니다.")
+        if st.button("다음 참가자 퇴장", type="primary", use_container_width=True):
+            st.session_state.pop("checkout_complete", None)
+            st.session_state.pop("checkout_candidate_code", None)
+            st.rerun()
+        footer()
+        return
+
+    with st.container(key="checkout_station"):
+        code = st.text_input(
+            "참가자 ID",
+            max_chars=2,
+            placeholder="RT",
+            key="checkout_code_input",
+            help="입장할 때 발급받은 영문 두 글자를 입력하세요.",
+        )
+        if st.button("ID 확인", use_container_width=True):
+            try:
+                candidate = service.active_participant_by_code(code)
+                st.session_state["checkout_candidate_code"] = candidate["code"]
+            except ValueError as exc:
+                st.session_state.pop("checkout_candidate_code", None)
+                st.error(str(exc))
+
+        candidate_code = st.session_state.get("checkout_candidate_code")
+        if candidate_code:
+            try:
+                candidate = service.active_participant_by_code(candidate_code)
+                label = "VIP" if candidate["category"] == "vip" else "일반"
+                st.markdown(
+                    f"""
+                    <div class="checkout-confirm-card">
+                      <div class="checkout-confirm-label">퇴장 참가자 확인</div>
+                      <div class="checkout-confirm-name">{esc(candidate['name'])}</div>
+                      <div class="checkout-confirm-meta">ID {esc(candidate['code'])} · {label}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "위 참가자를 퇴장 처리",
+                    type="primary",
+                    use_container_width=True,
+                    key="checkout_confirm_button",
+                ):
+                    service.check_out(
+                        candidate["id"],
+                        int(candidate["points"]),
+                        "독립 퇴장 화면",
+                        "checkout_station",
+                    )
+                    st.session_state["checkout_complete"] = {
+                        "code": candidate["code"],
+                        "name": candidate["name"],
+                    }
+                    st.session_state.pop("checkout_candidate_code", None)
+                    st.rerun()
+            except ValueError as exc:
+                st.session_state.pop("checkout_candidate_code", None)
+                st.error(str(exc))
+
+    st.link_button("메인 화면으로", "?view=home", use_container_width=True)
     footer()
 
 
@@ -334,9 +440,6 @@ def render_admin(service: LoungeService) -> None:
         st.markdown("## 전산 칩 관리")
         _quick_points_console(service, operator)
         st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
-    elif panel == "checkout":
-        _checkout_console(service, operator)
-        st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
     elif panel == "visitors":
         _participant_list(service, operator)
         st.link_button("운영자 메뉴로 돌아가기", "?view=admin")
@@ -353,10 +456,10 @@ def render_admin(service: LoungeService) -> None:
             ),
             (
                 "02",
-                "퇴장 처리",
-                "참가자를 검색하고 최종 보유 포인트와 퇴장을 기록합니다.",
-                "퇴장 처리 열기",
-                "?view=admin&panel=checkout",
+                "영업 분석",
+                "오늘의 방문·체류·입퇴장 흐름을 한눈에 확인합니다.",
+                "영업 분석 열기",
+                "?view=analytics",
             ),
             (
                 "03",
@@ -406,6 +509,140 @@ def _operator_password_gate(service: LoungeService) -> bool:
     return False
 
 
+def _analytics_password_gate(service: LoungeService) -> bool:
+    if st.session_state.get("analytics_authenticated") is True:
+        return True
+
+    st.markdown("## 영업 분석")
+    issue = service.analytics_password_issue()
+    if issue:
+        st.error(issue)
+        st.caption("Streamlit Secrets에 운영자 비밀번호와 다른 ANALYTICS_PASSWORD를 설정해 주세요.")
+        return False
+
+    with st.container(key="analytics_gate"):
+        st.markdown(
+            '<div class="analytics-gate-copy">영업 분석 전용 비밀번호를 입력해 주세요.</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("analytics_password_form", clear_on_submit=True):
+            password = st.text_input(
+                "영업 분석 비밀번호",
+                type="password",
+                placeholder="분석용 비밀번호 입력",
+                autocomplete="current-password",
+            )
+            submitted = st.form_submit_button(
+                "영업 분석 열기", type="primary", use_container_width=True
+            )
+        if submitted:
+            if service.verify_analytics_password(password):
+                st.session_state["analytics_authenticated"] = True
+                st.rerun()
+            st.error("비밀번호가 올바르지 않습니다.")
+    return False
+
+
+def _minutes_label(minutes: int) -> str:
+    hours, remainder = divmod(max(0, int(minutes)), 60)
+    if hours:
+        return f"{hours}시간 {remainder}분"
+    return f"{remainder}분"
+
+
+def _hourly_visits_html(rows: list[dict]) -> str:
+    if not rows:
+        return '<div class="analytics-empty">아직 오늘 입장 기록이 없습니다.</div>'
+    maximum = max(row["count"] for row in rows) or 1
+    bars = "".join(
+        f'<div class="hour-row"><div class="hour-label">{esc(row["hour"])}</div>'
+        f'<div class="hour-track"><div class="hour-fill" style="width:{max(8, row["count"] / maximum * 100):.1f}%"></div></div>'
+        f'<div class="hour-count">{row["count"]}명</div></div>'
+        for row in rows
+    )
+    return f'<div class="analytics-panel">{bars}</div>'
+
+
+def _category_split_html(general: int, vip: int) -> str:
+    total = general + vip
+    general_ratio = general / total * 100 if total else 0
+    vip_ratio = 100 - general_ratio if total else 0
+    return f"""
+    <div class="analytics-panel category-panel">
+      <div class="category-summary">
+        <div><span class="category-dot general-dot"></span>일반 <strong>{general}명</strong></div>
+        <div><span class="category-dot vip-dot"></span>VIP <strong>{vip}명</strong></div>
+      </div>
+      <div class="category-track">
+        <div class="category-general" style="width:{general_ratio:.1f}%"></div>
+        <div class="category-vip" style="width:{vip_ratio:.1f}%"></div>
+      </div>
+      <div class="category-percent"><span>{general_ratio:.1f}%</span><span>{vip_ratio:.1f}%</span></div>
+    </div>
+    """
+
+
+def _visit_details_html(visits: list[dict]) -> str:
+    if not visits:
+        return '<div class="analytics-empty">오늘 방문자 정보가 없습니다.</div>'
+    rows = []
+    for visit in visits:
+        category = "VIP" if visit["category"] == "vip" else "일반"
+        status = "입장 중" if visit["status"] == "active" else "퇴장"
+        status_class = "active" if visit["status"] == "active" else "exited"
+        rows.append(
+            f'<div class="visit-row"><div><div class="visit-name">{esc(visit["name"])}</div>'
+            f'<div class="visit-meta">ID {esc(visit["code"])} · {category}</div></div>'
+            f'<div class="visit-time"><span>입장 {esc(visit["checked_in"])}</span>'
+            f'<span>퇴장 {esc(visit["checked_out"])}</span></div>'
+            f'<div class="visit-duration">{esc(_minutes_label(visit["duration_minutes"]))}</div>'
+            f'<div class="visit-status {status_class}">{status}</div></div>'
+        )
+    return '<div class="analytics-panel visit-list">' + "".join(rows) + "</div>"
+
+
+def render_analytics(service: LoungeService) -> None:
+    top_brand(service, "VISITOR OPERATIONS ANALYTICS")
+    if not _analytics_password_gate(service):
+        footer()
+        return
+
+    st.markdown("## 영업 분석")
+    st.caption("오늘의 방문·입퇴장·체류 정보만 집계합니다. 전화번호는 표시하지 않습니다.")
+
+    @st.fragment(run_every=timedelta(seconds=10))
+    def analytics_live() -> None:
+        stats = service.visit_analytics()
+        st.markdown(
+            metric_cards(
+                [
+                    ("오늘 방문", stats["total"]),
+                    ("현재 입장", stats["active"]),
+                    ("퇴장 완료", stats["exited"]),
+                    ("평균 체류시간", _minutes_label(stats["average_duration_minutes"])),
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
+        left, right = st.columns([1.2, 0.8], gap="large")
+        with left:
+            st.markdown("### 시간대별 방문자 수")
+            st.markdown(_hourly_visits_html(stats["hourly"]), unsafe_allow_html=True)
+        with right:
+            st.markdown("### VIP·일반 방문 비율")
+            st.markdown(
+                _category_split_html(stats["general"], stats["vip"]),
+                unsafe_allow_html=True,
+            )
+        st.markdown("### 오늘 방문자별 입퇴장 정보")
+        st.caption("평균 체류시간은 퇴장이 완료된 방문만 기준으로 계산됩니다.")
+        st.markdown(_visit_details_html(stats["visits"]), unsafe_allow_html=True)
+
+    analytics_live()
+    st.link_button("운영자 콘솔로 돌아가기", "?view=admin")
+    footer()
+
+
 def _quick_points_console(service: LoungeService, operator: str) -> None:
     st.markdown(
         '<div class="quick-guide"><strong>사용 칩 + 두 글자 ID + 획득 점수</strong>'
@@ -432,29 +669,6 @@ def _quick_points_console(service: LoungeService, operator: str) -> None:
             st.markdown(f'<div class="quick-result success">{esc(message)}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="quick-result error">{esc(message)}</div>', unsafe_allow_html=True)
-
-
-def _checkout_console(service: LoungeService, operator: str) -> None:
-    st.markdown("### 퇴장 및 최종 정산")
-    selected = participant_picker(service, "checkout", active_only=True)
-    if not selected:
-        return
-    with st.form("checkout_form"):
-        final_points = st.number_input(
-            "실물 보유 포인트/칩 수", min_value=0, max_value=1_000_000, value=int(selected["points"]), step=1
-        )
-        note = st.text_input("교환·퇴장 메모 (선택)", max_chars=200, placeholder="예: 상품 교환 완료")
-        confirmed = st.checkbox("본인과 최종 수량을 확인했습니다.")
-        submitted = st.form_submit_button("퇴장 완료", type="primary", use_container_width=True)
-    if submitted:
-        if not confirmed:
-            st.error("확인 항목을 체크해 주세요.")
-        else:
-            try:
-                service.check_out(selected["id"], int(final_points), note, operator)
-                st.success(f"{selected['name']}님의 퇴장이 기록되었습니다. 최종 {int(final_points):,}P")
-            except ValueError as exc:
-                st.error(str(exc))
 
 
 def _participant_list(service: LoungeService, operator: str) -> None:
