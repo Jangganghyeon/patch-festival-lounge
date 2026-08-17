@@ -106,7 +106,9 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
         if points == 40:
             fourth = ranked
     with service.sessions.begin() as session:
-        session.get(Participant, participant.participant_id).display_code = "YQNRV2"
+        row = session.get(Participant, participant.participant_id)
+        row.legacy_key = "YQNRV2"
+        row.active_code = None
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "board"
