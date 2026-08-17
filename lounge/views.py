@@ -729,9 +729,10 @@ def _visit_details_html(visits: list[dict]) -> str:
         category = "VIP" if visit["category"] == "vip" else "일반"
         status = "입장 중" if visit["status"] == "active" else "퇴장"
         status_class = "active" if visit["status"] == "active" else "exited"
+        code_label = f'ID {esc(visit["code"])}' if visit["code"] else "임시 ID 해제됨"
         rows.append(
             f'<div class="visit-row"><div><div class="visit-name">{esc(visit["name"])}</div>'
-            f'<div class="visit-meta">ID {esc(visit["code"])} · {category} · '
+            f'<div class="visit-meta">{code_label} · {category} · '
             f'{esc(visit["age"])}세 · {esc(visit["phone"])}</div></div>'
             f'<div class="visit-time"><span>입장 {esc(visit["checked_in"])}</span>'
             f'<span>퇴장 {esc(visit["checked_out"])}</span></div>'
@@ -823,7 +824,7 @@ def _participant_list(service: LoungeService, operator: str) -> None:
         rows = [row for row in rows if row["status"] == "exited"]
     table = [
         {
-            "ID": row["code"],
+            "ID": row["code"] or "—",
             "이름": row["name"],
             "상태": "입장 중" if row["status"] == "active" else "퇴장",
             "포인트": row["points"],
@@ -839,7 +840,7 @@ def _participant_list(service: LoungeService, operator: str) -> None:
     if exited:
         st.markdown("#### 잘못 처리한 퇴장 복구")
         labels = {
-            row["id"]: f"{row['name']} · {row['code']} · {service.format_time(row['checked_out_at'], True)}"
+            row["id"]: f"{row['name']} · {service.format_time(row['checked_out_at'], True)}"
             for row in exited
         }
         chosen = st.selectbox("복구할 참가자", list(labels), format_func=lambda value: labels[value])
