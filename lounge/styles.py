@@ -58,13 +58,6 @@ p, label, .stCaption { color: #d9e2de; }
   box-shadow: 0 18px 50px rgba(0,0,0,.20); padding: 1.35rem;
 }
 .mode-card { min-height: 158px; margin-bottom: .6rem; }
-.entry-mode-card { border-color: rgba(91,227,159,.26); }
-.checkout-mode-card {
-  border-color: rgba(232,114,91,.42);
-  background: radial-gradient(circle at 95% 0%,rgba(232,114,91,.14),transparent 44%),
-    linear-gradient(145deg,rgba(55,28,24,.95),rgba(26,15,14,.97));
-}
-.checkout-mode-card .mode-num, .checkout-mode-card .mode-title { color: #ffb29f; }
 .mode-num { color: var(--gold); font-family: 'Playfair Display', serif; font-size: 1rem; }
 .mode-title { color: var(--cream); font-size: 1.15rem; font-weight: 800; margin: .55rem 0 .35rem; }
 .mode-copy { color: var(--muted); font-size: .88rem; line-height: 1.65; }
