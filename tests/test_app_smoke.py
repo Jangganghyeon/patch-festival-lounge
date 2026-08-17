@@ -14,6 +14,7 @@ from lounge.service import LoungeService
 @pytest.fixture(autouse=True)
 def operator_password(monkeypatch):
     monkeypatch.setenv("OPERATOR_PASSWORD", "test-operator-password")
+    monkeypatch.setenv("ANALYTICS_PASSWORD", "test-analytics-password")
 
 
 def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
@@ -23,8 +24,10 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
     cases = [
         ("home", "입장 등록"),
         ("kiosk", "게임 라운지 입장 등록"),
+        ("checkout", "퇴장 처리"),
         ("board", "현재 포인트 순위"),
         ("admin", "운영자 콘솔"),
+        ("analytics", "영업 분석"),
     ]
     for view, expected in cases:
         app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
@@ -68,6 +71,7 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
         database_url=database_url,
         field_encryption_key=encryption_key,
         operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
     )
     _engine, factory = create_db(config)
     service = LoungeService(factory, config)
@@ -111,6 +115,7 @@ def test_home_has_separate_vip_and_general_boards(tmp_path, monkeypatch):
     rendered = "\n".join(element.value for element in app.markdown)
     assert "VIP 라이브 보드" in rendered
     assert "일반 라이브 보드" in rendered
+    assert "퇴장 처리" in rendered
 
 
 def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
@@ -131,6 +136,59 @@ def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
     assert len(app.text_input) == 0
 
 
+def test_checkout_is_a_distinct_two_step_screen(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'checkout.db'}"
+    encryption_key = Fernet.generate_key().decode("ascii")
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", encryption_key)
+    config = RuntimeConfig(
+        database_url=database_url,
+        field_encryption_key=encryption_key,
+        operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
+    )
+    _engine, factory = create_db(config)
+    service = LoungeService(factory, config)
+    participant = service.check_in(
+        name="퇴장손님",
+        age=17,
+        phone="010-7777-7777",
+        category="general",
+        privacy_consent=True,
+        leaderboard_opt_in=True,
+    )
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "checkout"
+    app.run(timeout=20)
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "EXIT ONLY · 퇴장 전용 화면" in rendered
+    app.text_input[0].input(participant.display_code)
+    next(button for button in app.button if button.label == "ID 확인").click().run(timeout=20)
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "퇴장손님" in rendered
+    next(button for button in app.button if button.label == "위 참가자를 퇴장 처리").click().run(
+        timeout=20
+    )
+    assert service.get_participant(participant.participant_id)["status"] == "exited"
+
+
+def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'analytics.db'}")
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "analytics"
+    app.run(timeout=20)
+    assert len(app.text_input) == 1
+    assert app.text_input[0].label == "영업 분석 비밀번호"
+    app.text_input[0].input("test-analytics-password")
+    app.button[0].click().run(timeout=20)
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "시간대별 방문자 수" in rendered
+    assert "오늘 방문자별 입퇴장 정보" in rendered
+
+
 def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'admin.db'}"
     encryption_key = Fernet.generate_key().decode("ascii")
@@ -140,6 +198,7 @@ def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, m
         database_url=database_url,
         field_encryption_key=encryption_key,
         operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
     )
     create_db(config)
     from lounge import views

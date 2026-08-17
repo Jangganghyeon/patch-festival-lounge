@@ -121,6 +121,17 @@ class LoungeService:
         expected = self.config.operator_password
         return bool(expected) and hmac.compare_digest(password or "", expected)
 
+    def analytics_password_issue(self) -> str:
+        if not self.config.analytics_password:
+            return "ANALYTICS_PASSWORD가 설정되지 않았습니다."
+        if self.config.analytics_password == self.config.operator_password:
+            return "영업 분석 비밀번호는 운영자 콘솔 비밀번호와 다르게 설정해야 합니다."
+        return ""
+
+    def verify_analytics_password(self, password: str) -> bool:
+        expected = self.config.analytics_password
+        return not self.analytics_password_issue() and hmac.compare_digest(password or "", expected)
+
     def check_in(
         self,
         *,
@@ -241,6 +252,23 @@ class LoungeService:
             if not row:
                 raise ValueError("참가자를 찾을 수 없습니다.")
             return self._participant_dict(row, reveal_phone=reveal_phone)
+
+    def active_participant_by_code(self, code: str) -> dict[str, Any]:
+        normalized = (code or "").strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", normalized):
+            raise ValueError("영문 두 글자 ID를 입력해 주세요.")
+        with self.sessions() as session:
+            row = session.scalar(
+                select(Participant).where(
+                    and_(
+                        Participant.display_code == normalized,
+                        Participant.status == "active",
+                    )
+                )
+            )
+            if not row:
+                raise ValueError(f"현재 입장 중인 {normalized} 참가자를 찾을 수 없습니다.")
+            return self._participant_dict(row)
 
     def adjust_points(
         self,
@@ -444,6 +472,68 @@ class LoungeService:
                 "vip_leaderboard": self._leaderboard_in_session(session, "vip"),
                 "traffic": self._traffic_in_session(session),
             }
+
+    def visit_analytics(self) -> dict[str, Any]:
+        now = utcnow()
+        now_local = now.replace(tzinfo=UTC).astimezone(self.local_tz)
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
+
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(Participant)
+                .where(Participant.checked_in_at >= start_utc)
+                .order_by(desc(Participant.checked_in_at))
+            ).all()
+
+        hourly_counts: dict[str, int] = {}
+        completed_durations: list[int] = []
+        visits: list[dict[str, Any]] = []
+        for row in rows:
+            checked_in_local = row.checked_in_at.replace(tzinfo=UTC).astimezone(self.local_tz)
+            hour = checked_in_local.strftime("%H:00")
+            hourly_counts[hour] = hourly_counts.get(hour, 0) + 1
+
+            end = row.checked_out_at or now
+            duration_minutes = max(0, int((end - row.checked_in_at).total_seconds() // 60))
+            if row.checked_out_at is not None:
+                completed_durations.append(duration_minutes)
+            visits.append(
+                {
+                    "name": row.name,
+                    "code": row.display_code,
+                    "category": row.category,
+                    "status": row.status,
+                    "checked_in": self.format_time(row.checked_in_at),
+                    "checked_out": self.format_time(row.checked_out_at),
+                    "duration_minutes": duration_minutes,
+                }
+            )
+
+        total = len(rows)
+        active = sum(row.status == "active" for row in rows)
+        exited = total - active
+        vip = sum(row.category == "vip" for row in rows)
+        general = total - vip
+        average_duration = (
+            round(sum(completed_durations) / len(completed_durations))
+            if completed_durations
+            else 0
+        )
+        return {
+            "date": now_local.strftime("%Y-%m-%d"),
+            "total": total,
+            "active": active,
+            "exited": exited,
+            "vip": vip,
+            "general": general,
+            "average_duration_minutes": average_duration,
+            "hourly": [
+                {"hour": hour, "count": count}
+                for hour, count in sorted(hourly_counts.items())
+            ],
+            "visits": visits,
+        }
 
     def _public_name(self, row: Participant) -> str:
         if row.leaderboard_opt_in:
