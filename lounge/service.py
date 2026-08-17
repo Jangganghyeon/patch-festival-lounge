@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hmac
 import io
 import json
 import re
@@ -16,7 +15,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from .config import RuntimeConfig
 from .database import (
     DB_WRITE_LOCK,
-    AdminUser,
     AppSetting,
     AuditLog,
     Participant,
@@ -25,13 +23,12 @@ from .database import (
 from .security import (
     decrypt_text,
     encrypt_text,
-    hash_password,
     mask_phone,
     new_display_code,
     normalize_phone,
     phone_digest,
     validate_phone,
-    verify_password,
+    verify_operator_password,
 )
 
 UTC = timezone.utc
@@ -53,6 +50,8 @@ class QuickPointResult:
     participant_id: int
     display_code: str
     name: str
+    spent: int
+    earned: int
     delta: int
     balance: int
 
@@ -118,53 +117,8 @@ class LoungeService:
                     session.add(AppSetting(key=key, value=str(value)))
             self._audit(session, "settings_update", operator, details=values)
 
-    def has_admin(self) -> bool:
-        with self.sessions() as session:
-            return bool(session.scalar(select(func.count(AdminUser.id)).where(AdminUser.active.is_(True))))
-
-    def create_first_admin(self, username: str, password: str, setup_code: str) -> None:
-        username = username.strip()
-        if not 3 <= len(username) <= 40:
-            raise ValueError("관리자 아이디는 3~40자로 입력해 주세요.")
-        if not self.config.initial_setup_code or not hmac.compare_digest(
-            setup_code.strip(), self.config.initial_setup_code
-        ):
-            raise ValueError("초기 설정 코드가 올바르지 않습니다.")
-        with DB_WRITE_LOCK, self.sessions.begin() as session:
-            if session.scalar(select(func.count(AdminUser.id))) > 0:
-                raise ValueError("초기 관리자가 이미 등록되어 있습니다.")
-            session.add(
-                AdminUser(
-                    username=username,
-                    password_hash=hash_password(password),
-                    role="admin",
-                    active=True,
-                    created_at=utcnow(),
-                )
-            )
-            self._audit(session, "admin_created", username)
-
-    def authenticate(self, username: str, password: str) -> tuple[bool, str]:
-        with self.sessions() as session:
-            user = session.scalar(
-                select(AdminUser).where(
-                    and_(AdminUser.username == username.strip(), AdminUser.active.is_(True))
-                )
-            )
-            if not user or not verify_password(password, user.password_hash):
-                return False, ""
-            return True, user.role
-
-    def change_password(self, username: str, old_password: str, new_password: str) -> None:
-        ok, _ = self.authenticate(username, old_password)
-        if not ok:
-            raise ValueError("현재 비밀번호가 올바르지 않습니다.")
-        with DB_WRITE_LOCK, self.sessions.begin() as session:
-            user = session.scalar(select(AdminUser).where(AdminUser.username == username))
-            if not user:
-                raise ValueError("사용자를 찾을 수 없습니다.")
-            user.password_hash = hash_password(new_password)
-            self._audit(session, "password_changed", username)
+    def verify_operator_password(self, password: str) -> bool:
+        return verify_operator_password(password)
 
     def check_in(
         self,
@@ -341,12 +295,18 @@ class LoungeService:
             return participant.current_points
 
     def quick_adjust_points(self, command: str, operator: str) -> QuickPointResult:
-        match = re.fullmatch(r"\s*([A-Za-z]{2})\s*([+-]?\d{1,6})\s*", command or "")
+        match = re.fullmatch(r"\s*(\d{1,6})\s*([A-Za-z]{2})\s*(\d{1,6})\s*", command or "")
         if not match:
-            raise ValueError("RT70 형식으로 입력해 주세요. 차감 정정은 RT-20처럼 입력합니다.")
-        code = match.group(1).upper()
-        delta = int(match.group(2))
-        with self.sessions() as session:
+            raise ValueError("300RT140 형식으로 입력해 주세요: 사용 칩 + 두 글자 ID + 획득 점수")
+        spent = int(match.group(1))
+        code = match.group(2).upper()
+        earned = int(match.group(3))
+        if spent == 0 and earned == 0:
+            raise ValueError("사용 칩과 획득 점수가 모두 0일 수는 없습니다.")
+        delta = earned - spent
+        normalized_command = f"{spent}{code}{earned}"
+
+        with DB_WRITE_LOCK, self.sessions.begin() as session:
             participant = session.scalar(
                 select(Participant).where(
                     and_(Participant.display_code == code, Participant.status == "active")
@@ -354,16 +314,45 @@ class LoungeService:
             )
             if not participant:
                 raise ValueError(f"현재 입장 중인 {code} 참가자를 찾을 수 없습니다.")
-            participant_id = participant.id
-            participant_name = participant.name
-        balance = self.adjust_points(
-            participant_id,
-            delta,
-            "빠른 활동 포인트 기록",
-            command.strip().upper(),
-            operator,
-        )
-        return QuickPointResult(participant_id, code, participant_name, delta, balance)
+            new_balance = participant.current_points + delta
+            if new_balance < 0:
+                raise ValueError(
+                    f"{code} 참가자의 보유 칩이 부족합니다. 현재 {participant.current_points:,}P"
+                )
+            participant.current_points = new_balance
+            session.add(
+                PointTransaction(
+                    participant_id=participant.id,
+                    delta=delta,
+                    balance_after=new_balance,
+                    activity="칩 사용·게임 점수 기록",
+                    note=f"사용 {spent}P · 획득 {earned}P · {normalized_command}",
+                    operator=operator[:40],
+                    created_at=utcnow(),
+                )
+            )
+            self._audit(
+                session,
+                "chip_score_recorded",
+                operator,
+                participant.id,
+                {
+                    "spent": spent,
+                    "earned": earned,
+                    "delta": delta,
+                    "balance": new_balance,
+                    "command": normalized_command,
+                },
+            )
+            return QuickPointResult(
+                participant.id,
+                code,
+                participant.name,
+                spent,
+                earned,
+                delta,
+                new_balance,
+            )
 
     def check_out(
         self,
@@ -450,6 +439,8 @@ class LoungeService:
                 "active_points": int(active_points),
                 "recent": [self._public_participant(row) for row in recent],
                 "leaderboard": self._leaderboard_in_session(session),
+                "general_leaderboard": self._leaderboard_in_session(session, "general"),
+                "vip_leaderboard": self._leaderboard_in_session(session, "vip"),
                 "traffic": self._traffic_in_session(session),
             }
 
@@ -470,13 +461,21 @@ class LoungeService:
             "checked_in_at": row.checked_in_at,
         }
 
-    def _leaderboard_in_session(self, session: Session) -> list[dict[str, Any]]:
+    def leaderboard(self, category: str) -> list[dict[str, Any]]:
+        if category not in {"general", "vip"}:
+            raise ValueError("순위표 참가 유형이 올바르지 않습니다.")
+        with self.sessions() as session:
+            return self._leaderboard_in_session(session, category)
+
+    def _leaderboard_in_session(
+        self, session: Session, category: str | None = None
+    ) -> list[dict[str, Any]]:
         size = max(3, min(30, int(self.setting("leaderboard_size", "10"))))
+        stmt = select(Participant).where(Participant.status == "active")
+        if category is not None:
+            stmt = stmt.where(Participant.category == category)
         rows = session.scalars(
-            select(Participant)
-            .where(Participant.status == "active")
-            .order_by(desc(Participant.current_points), Participant.checked_in_at)
-            .limit(size)
+            stmt.order_by(desc(Participant.current_points), Participant.checked_in_at).limit(size)
         ).all()
         return [self._public_participant(row) for row in rows]
 
