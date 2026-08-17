@@ -309,13 +309,17 @@ input, textarea { color: var(--cream) !important; }
   border: 1px solid rgba(232,114,91,.34); border-radius: 22px;
   background: rgba(47,25,22,.9); box-shadow: 0 20px 55px rgba(0,0,0,.22);
 }
-.st-key-checkout_station [data-baseweb="input"] > div {
-  min-height: 86px; border-radius: 16px; border-color: rgba(255,155,131,.48) !important;
+.st-key-checkout_station [data-baseweb="input"],
+.st-key-checkout_station [data-baseweb="input"] > div,
+.st-key-checkout_station [data-baseweb="base-input"] {
+  min-height: 104px; border-radius: 16px; border-color: rgba(255,155,131,.48) !important;
   background: #261714 !important;
 }
 .st-key-checkout_station input {
-  min-height: 84px; color:#ffd4c8 !important; font-size:3rem !important;
-  font-weight:900; letter-spacing:.16em; text-align:center; text-transform:uppercase;
+  height:104px !important; min-height:104px; padding:1rem 1.25rem !important;
+  box-sizing:border-box; overflow:visible; line-height:1.2 !important;
+  color:#ffd4c8 !important; font-size:3rem !important; font-weight:900;
+  letter-spacing:.16em; text-align:center; text-transform:uppercase;
 }
 .checkout-confirm-card {
   margin: 1rem 0; padding: 1.2rem; text-align:center; border-radius:18px;
@@ -396,6 +400,12 @@ input, textarea { color: var(--cream) !important; }
   .st-key-kiosk_guest_card, .st-key-kiosk_access_card { min-height: auto; padding: 1.35rem; }
   .st-key-check_in_kiosk input { font-size: 1.15rem !important; }
   .checkout-hero { padding:1.35rem; }
+  .st-key-checkout_station [data-baseweb="input"],
+  .st-key-checkout_station [data-baseweb="input"] > div,
+  .st-key-checkout_station [data-baseweb="base-input"] { min-height:84px; }
+  .st-key-checkout_station input {
+    height:84px !important; min-height:84px; font-size:2.1rem !important;
+  }
   .visit-row { grid-template-columns:1fr auto; gap:.55rem; }
   .visit-time { grid-column:1/2; }
   .visit-duration { grid-column:2/3; grid-row:2; }
