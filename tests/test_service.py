@@ -119,6 +119,25 @@ def test_same_phone_can_reenter_after_checkout(service: LoungeService):
     assert second.participant_id != first.participant_id
 
 
+def test_checkout_identity_requires_matching_name_phone_and_code(service: LoungeService):
+    participant = check_in(service, name="퇴장 손님", phone="010-7777-7777")
+
+    verified = service.verify_checkout_identity(
+        name="  퇴장   손님 ",
+        phone="01077777777",
+        code=participant.display_code.lower(),
+    )
+    assert verified["id"] == participant.participant_id
+
+    for wrong_values in (
+        {"name": "다른 손님", "phone": "010-7777-7777", "code": participant.display_code},
+        {"name": "퇴장 손님", "phone": "010-0000-0000", "code": participant.display_code},
+        {"name": "퇴장 손님", "phone": "010-7777-7777", "code": "ZZ"},
+    ):
+        with pytest.raises(ValueError, match="입력 정보와 일치"):
+            service.verify_checkout_identity(**wrong_values)
+
+
 def test_points_cannot_be_negative(service: LoungeService):
     result = check_in(service)
     with pytest.raises(ValueError, match="많이 차감"):
@@ -183,4 +202,7 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     assert stats["general"] == 1
     assert stats["vip"] == 1
     assert sum(row["count"] for row in stats["hourly"]) == 2
+    general_visit = next(visit for visit in stats["visits"] if visit["code"] == general.display_code)
+    assert general_visit["age"] == 17
+    assert general_visit["phone"] == "010-****-5555"
     assert all("points" not in visit for visit in stats["visits"])

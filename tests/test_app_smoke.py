@@ -116,6 +116,7 @@ def test_home_has_separate_vip_and_general_boards(tmp_path, monkeypatch):
     assert "VIP 라이브 보드" in rendered
     assert "일반 라이브 보드" in rendered
     assert "퇴장 처리" in rendered
+    assert "checkout-mode-card" not in rendered
 
 
 def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
@@ -136,7 +137,7 @@ def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
     assert len(app.text_input) == 0
 
 
-def test_checkout_is_a_distinct_two_step_screen(tmp_path, monkeypatch):
+def test_checkout_requires_name_phone_and_id_before_confirmation(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'checkout.db'}"
     encryption_key = Fernet.generate_key().decode("ascii")
     monkeypatch.setenv("DATABASE_URL", database_url)
@@ -163,8 +164,14 @@ def test_checkout_is_a_distinct_two_step_screen(tmp_path, monkeypatch):
     app.run(timeout=20)
     rendered = "\n".join(element.value for element in app.markdown)
     assert "EXIT ONLY · 퇴장 전용 화면" in rendered
-    app.text_input[0].input(participant.display_code)
-    next(button for button in app.button if button.label == "ID 확인").click().run(timeout=20)
+    next(field for field in app.text_input if field.label == "이름").input("퇴장손님")
+    next(field for field in app.text_input if field.label == "전화번호").input("010-7777-7777")
+    next(field for field in app.text_input if field.label == "참가자 ID").input(
+        participant.display_code
+    )
+    next(button for button in app.button if button.label == "입장 정보 확인").click().run(
+        timeout=20
+    )
     rendered = "\n".join(element.value for element in app.markdown)
     assert "퇴장손님" in rendered
     next(button for button in app.button if button.label == "위 참가자를 퇴장 처리").click().run(

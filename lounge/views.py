@@ -55,23 +55,21 @@ def render_home(service: LoungeService) -> None:
             "방문자가 직접 이름·나이·연락처·참가 유형을 입력합니다.",
             "입장 화면 열기",
             "?view=kiosk",
-            "entry-mode-card",
         ),
         (
             "02",
             "퇴장 처리",
-            "두 글자 ID를 확인하고 빠르게 퇴장을 완료합니다.",
+            "이름·전화번호·두 글자 ID를 확인하고 퇴장을 완료합니다.",
             "퇴장 화면 열기",
             "?view=checkout",
-            "checkout-mode-card",
         ),
     ]
-    for col, (number, title, copy, label, href, card_class) in zip(
+    for col, (number, title, copy, label, href) in zip(
         primary_columns, primary_cards, strict=True
     ):
         with col:
             st.markdown(
-                f"<div class='mode-card {card_class}'><div class='mode-num'>{number}</div>"
+                f"<div class='mode-card'><div class='mode-num'>{number}</div>"
                 f"<div class='mode-title'>{esc(title)}</div><div class='mode-copy'>{esc(copy)}</div></div>",
                 unsafe_allow_html=True,
             )
@@ -135,7 +133,7 @@ def render_checkout(service: LoungeService) -> None:
         <div class="checkout-hero">
           <div class="checkout-kicker">EXIT ONLY · 퇴장 전용 화면</div>
           <div class="checkout-title">퇴장 처리</div>
-          <div class="checkout-copy">입장 등록 화면이 아닙니다. 발급받은 영문 두 글자 ID만 입력해 주세요.</div>
+          <div class="checkout-copy">입장 등록 화면이 아닙니다. 입장할 때 작성한 이름·전화번호와 발급받은 ID를 입력해 주세요.</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -152,16 +150,32 @@ def render_checkout(service: LoungeService) -> None:
         return
 
     with st.container(key="checkout_station"):
-        code = st.text_input(
-            "참가자 ID",
-            max_chars=2,
-            placeholder="RT",
-            key="checkout_code_input",
-            help="입장할 때 발급받은 영문 두 글자를 입력하세요.",
-        )
-        if st.button("ID 확인", use_container_width=True):
+        with st.form("checkout_identity_form"):
+            name = st.text_input(
+                "이름",
+                max_chars=40,
+                placeholder="홍길동",
+                key="checkout_name_input",
+            )
+            phone = st.text_input(
+                "전화번호",
+                max_chars=15,
+                placeholder="010-1234-5678",
+                key="checkout_phone_input",
+            )
+            code = st.text_input(
+                "참가자 ID",
+                max_chars=2,
+                placeholder="RT",
+                key="checkout_code_input",
+                help="입장할 때 발급받은 영문 두 글자를 입력하세요.",
+            )
+            identity_submitted = st.form_submit_button(
+                "입장 정보 확인", use_container_width=True
+            )
+        if identity_submitted:
             try:
-                candidate = service.active_participant_by_code(code)
+                candidate = service.verify_checkout_identity(name=name, phone=phone, code=code)
                 st.session_state["checkout_candidate_code"] = candidate["code"]
             except ValueError as exc:
                 st.session_state.pop("checkout_candidate_code", None)
@@ -592,7 +606,8 @@ def _visit_details_html(visits: list[dict]) -> str:
         status_class = "active" if visit["status"] == "active" else "exited"
         rows.append(
             f'<div class="visit-row"><div><div class="visit-name">{esc(visit["name"])}</div>'
-            f'<div class="visit-meta">ID {esc(visit["code"])} · {category}</div></div>'
+            f'<div class="visit-meta">ID {esc(visit["code"])} · {category} · '
+            f'{esc(visit["age"])}세 · {esc(visit["phone"])}</div></div>'
             f'<div class="visit-time"><span>입장 {esc(visit["checked_in"])}</span>'
             f'<span>퇴장 {esc(visit["checked_out"])}</span></div>'
             f'<div class="visit-duration">{esc(_minutes_label(visit["duration_minutes"]))}</div>'
@@ -608,7 +623,7 @@ def render_analytics(service: LoungeService) -> None:
         return
 
     st.markdown("## 영업 분석")
-    st.caption("오늘의 방문·입퇴장·체류 정보만 집계합니다. 전화번호는 표시하지 않습니다.")
+    st.caption("오늘의 방문·입퇴장·체류 정보를 집계합니다. 전화번호는 일부만 마스킹해 표시합니다.")
 
     @st.fragment(run_every=timedelta(seconds=10))
     def analytics_live() -> None:
