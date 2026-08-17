@@ -218,6 +218,7 @@ def test_checkout_requires_name_phone_and_id_before_confirmation(tmp_path, monke
     app.run(timeout=20)
     rendered = "\n".join(element.value for element in app.markdown)
     assert "EXIT ONLY · 퇴장 전용 화면" in rendered
+    assert len(app.get("link_button")) == 0
     next(field for field in app.text_input if field.label == "이름").input("퇴장손님")
     next(field for field in app.text_input if field.label == "전화번호").input("010-7777-7777")
     next(field for field in app.text_input if field.label == "참가자 ID").input(
