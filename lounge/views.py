@@ -218,7 +218,6 @@ def render_checkout(service: LoungeService) -> None:
                 st.session_state.pop("checkout_candidate_code", None)
                 st.error(str(exc))
 
-    st.link_button("메인 화면으로", "?view=home", use_container_width=True)
     footer()
 
 
