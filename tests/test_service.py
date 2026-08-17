@@ -13,7 +13,7 @@ def service(tmp_path):
     config = RuntimeConfig(
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         field_encryption_key=Fernet.generate_key().decode("ascii"),
-        initial_setup_code="SETUP123",
+        operator_password="test-operator-password",
     )
     _engine, factory = create_db(config)
     return LoungeService(factory, config)
@@ -61,17 +61,35 @@ def test_two_letter_codes_are_unique(service: LoungeService):
 
 def test_quick_point_command_is_case_insensitive(service: LoungeService):
     participant = check_in(service)
-    added = service.quick_adjust_points(f"{participant.display_code.lower()}70", "operator")
-    assert added.delta == 70
-    assert added.balance == 70
-    corrected = service.quick_adjust_points(f"{participant.display_code}-20", "operator")
-    assert corrected.delta == -20
-    assert corrected.balance == 50
+    service.adjust_points(participant.participant_id, 580, "시작 테스트", "", "operator")
+    recorded = service.quick_adjust_points(
+        f"300{participant.display_code.lower()}140", "operator"
+    )
+    assert recorded.spent == 300
+    assert recorded.earned == 140
+    assert recorded.delta == -160
+    assert recorded.balance == 420
+
+
+def test_quick_point_command_records_zero_net_change(service: LoungeService):
+    participant = check_in(service)
+    recorded = service.quick_adjust_points(f"50{participant.display_code}50", "operator")
+    assert recorded.delta == 0
+    assert recorded.balance == 0
+
+
+def test_quick_point_command_cannot_make_balance_negative(service: LoungeService):
+    participant = check_in(service)
+    with pytest.raises(ValueError, match="보유 칩이 부족"):
+        service.quick_adjust_points(f"300{participant.display_code}140", "operator")
 
 
 def test_quick_point_command_rejects_invalid_input(service: LoungeService):
-    with pytest.raises(ValueError, match="RT70"):
+    with pytest.raises(ValueError, match="300RT140"):
         service.quick_adjust_points("잘못된 입력", "operator")
+
+    with pytest.raises(ValueError, match="두 글자 ID"):
+        service.quick_adjust_points("77H1230", "operator")
 
 
 def test_legacy_codes_are_migrated_to_two_letters(service: LoungeService):
@@ -124,6 +142,16 @@ def test_leaderboard_respects_name_opt_in(service: LoungeService):
     assert "김하늘" in names
 
 
+def test_vip_and_general_leaderboards_are_separate(service: LoungeService):
+    general = check_in(service, phone="010-3333-3333", name="일반손님")
+    vip = check_in(service, phone="010-4444-4444", name="우대손님", category="vip")
+    service.adjust_points(general.participant_id, 100, "게임", "", "op")
+    service.adjust_points(vip.participant_id, 200, "게임", "", "op")
+
+    assert [row["code"] for row in service.leaderboard("general")] == [general.display_code]
+    assert [row["code"] for row in service.leaderboard("vip")] == [vip.display_code]
+
+
 def test_export_is_utf8_bom_csv(service: LoungeService):
     check_in(service)
     payload = service.export_participants_csv()
@@ -131,12 +159,6 @@ def test_export_is_utf8_bom_csv(service: LoungeService):
     assert "홍길동" in payload.decode("utf-8-sig")
 
 
-def test_admin_password(service: LoungeService):
-    service.create_first_admin("patch_admin", "safe-password-123", "SETUP123")
-    assert service.authenticate("patch_admin", "safe-password-123") == (True, "admin")
-    assert service.authenticate("patch_admin", "wrong") == (False, "")
-
-
-def test_admin_setup_code_is_required(service: LoungeService):
-    with pytest.raises(ValueError, match="설정 코드"):
-        service.create_first_admin("patch_admin", "safe-password-123", "WRONG")
+def test_operator_uses_only_shared_password(service: LoungeService):
+    assert service.verify_operator_password("test-operator-password") is True
+    assert service.verify_operator_password("wrong") is False
