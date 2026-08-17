@@ -27,7 +27,7 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
         ("checkout", "퇴장 처리"),
         ("board", "현재 포인트 순위"),
         ("admin", "운영자 콘솔"),
-        ("analytics", "영업 분석"),
+        ("analytics", "운영자 콘솔"),
     ]
     for view, expected in cases:
         app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
@@ -135,6 +135,32 @@ def test_admin_requires_only_shared_password(tmp_path, monkeypatch):
     rendered = "\n".join(element.value for element in app.markdown)
     assert "전산 칩 관리" in rendered
     assert len(app.text_input) == 0
+    assert "화면 표시 초기화" in rendered
+    assert len(app.get("link_button")) == 0
+
+
+def test_admin_internal_navigation_keeps_auth_and_has_back_button(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'admin-navigation.db'}")
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "admin"
+    app.session_state["operator_authenticated"] = True
+    app.run(timeout=20)
+
+    next(button for button in app.button if button.label == "초기화 기능 열기").click().run(
+        timeout=20
+    )
+    assert app.query_params["panel"] == ["reset"]
+    assert not any(field.label == "운영자 비밀번호" for field in app.text_input)
+    assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
+
+    next(button for button in app.button if button.label == "← 운영자 메뉴로 돌아가기").click().run(
+        timeout=20
+    )
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "화면 표시 초기화" in rendered
+    assert "panel" not in app.query_params
 
 
 def test_checkout_requires_name_phone_and_id_before_confirmation(tmp_path, monkeypatch):
@@ -188,12 +214,21 @@ def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
     app.query_params["view"] = "analytics"
     app.run(timeout=20)
     assert len(app.text_input) == 1
+    assert app.text_input[0].label == "운영자 비밀번호"
+    app.text_input[0].input("test-operator-password")
+    next(button for button in app.button if button.label == "운영자 콘솔 열기").click().run(
+        timeout=20
+    )
+    assert len(app.text_input) == 1
     assert app.text_input[0].label == "영업 분석 비밀번호"
     app.text_input[0].input("test-analytics-password")
-    app.button[0].click().run(timeout=20)
+    next(button for button in app.button if button.label == "영업 분석 열기").click().run(
+        timeout=20
+    )
     rendered = "\n".join(element.value for element in app.markdown)
     assert "시간대별 방문자 수" in rendered
     assert "오늘 방문자별 입퇴장 정보" in rendered
+    assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
 
 
 def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):

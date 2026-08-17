@@ -95,6 +95,7 @@ DEFAULT_SETTINGS = {
     "vip_start_points": "20",
     "leaderboard_size": "10",
     "privacy_retention_days": "30",
+    "public_display_reset_at": "",
 }
 
 

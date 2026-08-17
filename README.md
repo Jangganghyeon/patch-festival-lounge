@@ -18,7 +18,9 @@
 - 각 보드의 TOP 3 시상대와 개인정보 보호형 전체 순위표
 - 전화번호 암호화 저장과 공개 화면 개인정보 마스킹
 - 관리자 아이디 없이 공용 비밀번호 한 칸만 사용하는 운영자 콘솔
-- 운영자 콘솔과 다른 전용 비밀번호를 사용하는 방문·체류 영업 분석 화면(전화번호 마스킹)
+- 운영자 콘솔 내부 기능을 새 탭 없이 이동하며 최초 공용 비밀번호 인증을 유지
+- 운영자 콘솔과 다른 2차 비밀번호를 사용하는 방문·체류 영업 분석 화면(전화번호 마스킹)
+- 운영 기록은 보존하고 라운지·라이브 보드의 방문자 표시만 초기화하는 기능
 - 시간대별 방문자 수, 입퇴장 현황, VIP·일반 비율, 평균 체류시간, 개인별 입퇴장 정보
 - 보관기간이 지난 개인정보의 되돌릴 수 없는 익명화
 - SQLite 로컬 운영 및 PostgreSQL 클라우드 운영 지원
@@ -33,9 +35,8 @@
 - VIP 실시간 현황판: `http://메인컴퓨터IP:8501/?view=board&category=vip`
 - 일반 실시간 현황판: `http://메인컴퓨터IP:8501/?view=board&category=general`
 - 운영자 콘솔: `http://메인컴퓨터IP:8501/?view=admin`
-- 영업 분석: `http://메인컴퓨터IP:8501/?view=analytics`
 
-입장용 컴퓨터와 현황판 컴퓨터를 메인 컴퓨터와 같은 Wi-Fi에 연결한 뒤 해당 주소를 열면 됩니다. 운영자 콘솔은 공용 비밀번호만 입력해 열며 관리자 아이디는 사용하지 않습니다.
+입장용 컴퓨터와 현황판 컴퓨터를 메인 컴퓨터와 같은 Wi-Fi에 연결한 뒤 해당 주소를 열면 됩니다. 운영자 콘솔은 공용 비밀번호만 입력해 열며 관리자 아이디는 사용하지 않습니다. 영업 분석은 운영자 콘솔 안에서 별도 2차 비밀번호로 엽니다.
 
 > 학교 네트워크가 기기 간 통신을 막는 경우 휴대전화 핫스팟이나 동아리 공유기를 사용하거나, 아래의 Streamlit Community Cloud 배포를 사용하세요.
 
@@ -44,7 +45,7 @@
 | 장치 | 화면 | 주소 모드 |
 |---|---|---|
 | 입구 노트북/태블릿 | 방문자 입력만 표시 | `?view=kiosk` |
-| 퇴구 노트북/태블릿 | 두 글자 ID 퇴장 처리 | `?view=checkout` |
+| 퇴구 노트북/태블릿 | 이름·전화번호·두 글자 ID 퇴장 처리 | `?view=checkout` |
 | 메인 운영 컴퓨터 | 전산 기록·영업 분석·명단 관리 | `?view=admin` |
 | VIP 빔프로젝터/TV | VIP 순위·현황 | `?view=board&category=vip` |
 | 일반 빔프로젝터/TV | 일반 순위·현황 | `?view=board&category=general` |
@@ -57,7 +58,7 @@
 2. Streamlit Community Cloud에서 저장소와 `app.py`를 선택합니다.
 3. 영구 저장을 위해 PostgreSQL 데이터베이스를 준비합니다. 로컬 기본값인 SQLite는 클라우드 앱 재시작 시 데이터가 사라질 수 있어 실제 행사에는 권장하지 않습니다.
 4. `.streamlit/secrets.example.toml` 형식대로 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`, `OPERATOR_PASSWORD`, `ANALYTICS_PASSWORD`, `APP_TIMEZONE`을 Streamlit의 **Settings → Secrets**에 저장합니다.
-5. 배포 후 `?view=kiosk`, `?view=checkout`, `?view=board&category=vip`, `?view=board&category=general`, `?view=admin`, `?view=analytics` 주소를 각 장치에 북마크합니다.
+5. 배포 후 `?view=kiosk`, `?view=checkout`, `?view=board&category=vip`, `?view=board&category=general`, `?view=admin` 주소를 각 장치에 북마크합니다.
 
 암호화 키는 아래 명령으로 만들 수 있습니다.
 

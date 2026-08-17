@@ -458,31 +458,79 @@ class LoungeService:
             participant.exit_note = ""
             self._audit(session, "check_out_reverted", operator, participant_id)
 
+    @staticmethod
+    def _parse_reset_at(value: str) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+    def _public_display_cutoff(self, session: Session) -> datetime | None:
+        setting = session.get(AppSetting, "public_display_reset_at")
+        return self._parse_reset_at(setting.value if setting else "")
+
+    def public_display_reset_at(self) -> datetime | None:
+        return self._parse_reset_at(self.setting("public_display_reset_at", ""))
+
+    def reset_public_display(self, operator: str) -> datetime:
+        reset_at = utcnow()
+        value = reset_at.isoformat(timespec="microseconds")
+        with DB_WRITE_LOCK, self.sessions.begin() as session:
+            setting = session.get(AppSetting, "public_display_reset_at")
+            if setting:
+                setting.value = value
+            else:
+                session.add(AppSetting(key="public_display_reset_at", value=value))
+            self._audit(
+                session,
+                "public_display_reset",
+                operator,
+                details={"reset_at": value, "records_deleted": False},
+            )
+        return reset_at
+
     def dashboard(self) -> dict[str, Any]:
         with self.sessions() as session:
-            total = session.scalar(select(func.count(Participant.id))) or 0
+            cutoff = self._public_display_cutoff(session)
+            visible = Participant.checked_in_at >= cutoff if cutoff else None
+            total_stmt = select(func.count(Participant.id))
+            if visible is not None:
+                total_stmt = total_stmt.where(visible)
+            total = session.scalar(total_stmt) or 0
+            active_filters = [Participant.status == "active"]
+            if visible is not None:
+                active_filters.append(visible)
             active = (
-                session.scalar(select(func.count(Participant.id)).where(Participant.status == "active")) or 0
+                session.scalar(select(func.count(Participant.id)).where(and_(*active_filters))) or 0
             )
             exited = total - active
+            vip_filters = [Participant.status == "active", Participant.category == "vip"]
+            if visible is not None:
+                vip_filters.append(visible)
             vip_active = (
                 session.scalar(
-                    select(func.count(Participant.id)).where(
-                        and_(Participant.status == "active", Participant.category == "vip")
-                    )
+                    select(func.count(Participant.id)).where(and_(*vip_filters))
                 )
                 or 0
             )
+            point_filters = [Participant.status == "active"]
+            if visible is not None:
+                point_filters.append(visible)
             active_points = (
                 session.scalar(
                     select(func.coalesce(func.sum(Participant.current_points), 0)).where(
-                        Participant.status == "active"
+                        and_(*point_filters)
                     )
                 )
                 or 0
             )
+            recent_stmt = select(Participant)
+            if visible is not None:
+                recent_stmt = recent_stmt.where(visible)
             recent = session.scalars(
-                select(Participant).order_by(desc(Participant.checked_in_at)).limit(8)
+                recent_stmt.order_by(desc(Participant.checked_in_at)).limit(8)
             ).all()
             return {
                 "total": int(total),
@@ -591,6 +639,9 @@ class LoungeService:
     ) -> list[dict[str, Any]]:
         size = max(3, min(30, int(self.setting("leaderboard_size", "10"))))
         stmt = select(Participant).where(Participant.status == "active")
+        cutoff = self._public_display_cutoff(session)
+        if cutoff is not None:
+            stmt = stmt.where(Participant.checked_in_at >= cutoff)
         if category is not None:
             stmt = stmt.where(Participant.category == category)
         rows = session.scalars(
@@ -600,6 +651,9 @@ class LoungeService:
 
     def _traffic_in_session(self, session: Session) -> list[dict[str, Any]]:
         since = utcnow() - timedelta(hours=8)
+        cutoff = self._public_display_cutoff(session)
+        if cutoff is not None:
+            since = max(since, cutoff)
         rows = session.scalars(select(Participant).where(Participant.checked_in_at >= since)).all()
         buckets: dict[str, int] = {}
         for row in rows:

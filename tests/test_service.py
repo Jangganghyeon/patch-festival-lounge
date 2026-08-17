@@ -172,6 +172,28 @@ def test_vip_and_general_leaderboards_are_separate(service: LoungeService):
     assert [row["code"] for row in service.leaderboard("vip")] == [vip.display_code]
 
 
+def test_public_display_reset_hides_old_visitors_without_deleting_records(
+    service: LoungeService,
+):
+    old = check_in(service, phone="010-3000-0001", name="기존방문")
+    service.adjust_points(old.participant_id, 10, "기록 확인", "", "op")
+    assert service.dashboard()["total"] == 1
+    assert [row["code"] for row in service.leaderboard("general")] == [old.display_code]
+
+    reset_at = service.reset_public_display("operator")
+
+    assert service.public_display_reset_at() == reset_at
+    assert service.dashboard()["total"] == 0
+    assert service.leaderboard("general") == []
+    assert service.get_participant(old.participant_id)["name"] == "기존방문"
+    assert service.search_participants("기존방문")[0]["id"] == old.participant_id
+    assert service.recent_transactions()[0]["code"] == old.display_code
+
+    new = check_in(service, phone="010-3000-0002", name="신규방문")
+    assert service.dashboard()["total"] == 1
+    assert [row["code"] for row in service.leaderboard("general")] == [new.display_code]
+
+
 def test_export_is_utf8_bom_csv(service: LoungeService):
     check_in(service)
     payload = service.export_participants_csv()
