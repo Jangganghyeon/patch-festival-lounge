@@ -15,6 +15,7 @@ from lounge.service import LoungeService
 def operator_password(monkeypatch):
     monkeypatch.setenv("OPERATOR_PASSWORD", "test-operator-password")
     monkeypatch.setenv("ANALYTICS_PASSWORD", "test-analytics-password")
+    monkeypatch.setenv("RESET_PASSWORD", "test-reset-password")
 
 
 def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
@@ -25,7 +26,7 @@ def test_all_public_routes_render_without_exception(tmp_path, monkeypatch):
         ("home", "입장 등록"),
         ("kiosk", "게임 라운지 입장 등록"),
         ("checkout", "퇴장 처리"),
-        ("board", "현재 포인트 순위"),
+        ("board", "4위부터 순위"),
         ("admin", "운영자 콘솔"),
         ("analytics", "운영자 콘솔"),
     ]
@@ -84,6 +85,19 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
         leaderboard_opt_in=True,
     )
     service.adjust_points(participant.participant_id, 70, "테스트", "", "operator")
+    fourth = None
+    for index, points in enumerate((60, 50, 40), start=1):
+        ranked = service.check_in(
+            name=f"순위손님{index}",
+            age=17,
+            phone=f"010-9999-000{index}",
+            category="general",
+            privacy_consent=True,
+            leaderboard_opt_in=True,
+        )
+        service.adjust_points(ranked.participant_id, points, "테스트", "", "operator")
+        if points == 40:
+            fourth = ranked
     with service.sessions.begin() as session:
         session.get(Participant, participant.participant_id).display_code = "YQNRV2"
 
@@ -97,6 +111,11 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     assert 'class="winner-crown"' in rendered
     assert 'class="podium-sparkle sparkle-1"' in rendered
     assert "class='ranking-heading'" in rendered
+    assert '<div class="rank-number">04</div>' in rendered
+    assert '<div class="rank-number">01</div>' not in rendered
+    assert '<div class="rank-number">02</div>' not in rendered
+    assert '<div class="rank-number">03</div>' not in rendered
+    assert fourth is not None and fourth.display_code in rendered
     migrated_code = service.get_participant(participant.participant_id)["code"]
     assert len(migrated_code) == 2
     assert migrated_code in rendered
@@ -153,7 +172,16 @@ def test_admin_internal_navigation_keeps_auth_and_has_back_button(tmp_path, monk
     )
     assert app.query_params["panel"] == ["reset"]
     assert not any(field.label == "운영자 비밀번호" for field in app.text_input)
+    assert len(app.text_input) == 1
+    assert app.text_input[0].label == "초기화 비밀번호"
     assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
+
+    app.text_input[0].input("test-reset-password")
+    next(button for button in app.button if button.label == "초기화 기능 열기").click().run(
+        timeout=20
+    )
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "기록을 삭제하지 않는 표시 초기화" in rendered
 
     next(button for button in app.button if button.label == "← 운영자 메뉴로 돌아가기").click().run(
         timeout=20

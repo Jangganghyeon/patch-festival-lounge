@@ -312,11 +312,11 @@ def metric_cards(items: list[tuple[str, object]]) -> str:
     return f"<div class='metric-grid'>{blocks}</div>"
 
 
-def leaderboard_html(rows: list[dict]) -> str:
+def leaderboard_html(rows: list[dict], start_rank: int = 1) -> str:
     if not rows:
-        return "<div class='panel-card' style='color:#a5b6ae'>아직 순위 데이터가 없습니다.</div>"
+        return "<div class='panel-card' style='color:#a5b6ae'>4위 이하 참가자가 없습니다.</div>"
     body = []
-    for index, row in enumerate(rows, 1):
+    for index, row in enumerate(rows, start_rank):
         body.append(
             f'<div class="rank-row"><div class="rank-number">{index:02d}</div>'
             f'<div><div class="rank-name">{esc(row["name"])}</div>'
@@ -396,8 +396,8 @@ def render_board(service: LoungeService) -> None:
             with st.container(key="board_ranking"):
                 st.markdown(
                     f"<div class='ranking-heading'><span>{esc(group_label)} PLAYERS</span>"
-                    "<strong>현재 포인트 순위</strong></div>"
-                    + leaderboard_html(leaderboard),
+                    "<strong>4위부터 순위</strong></div>"
+                    + leaderboard_html(leaderboard[3:], start_rank=4),
                     unsafe_allow_html=True,
                 )
 
@@ -458,6 +458,8 @@ def _admin_back_button(key: str) -> None:
 
 def _public_display_reset_panel(service: LoungeService, operator: str) -> None:
     st.markdown("## 라운지·라이브 보드 초기화")
+    if not _reset_password_gate(service):
+        return
     st.markdown(
         """
         <div class="panel-card">
@@ -625,6 +627,39 @@ def _analytics_password_gate(service: LoungeService) -> bool:
         if submitted:
             if service.verify_analytics_password(password):
                 st.session_state["analytics_authenticated"] = True
+                st.rerun()
+            st.error("비밀번호가 올바르지 않습니다.")
+    return False
+
+
+def _reset_password_gate(service: LoungeService) -> bool:
+    if st.session_state.get("reset_authenticated") is True:
+        return True
+
+    issue = service.reset_password_issue()
+    if issue:
+        st.error(issue)
+        st.caption("Streamlit Secrets에 운영자 비밀번호와 다른 RESET_PASSWORD를 설정해 주세요.")
+        return False
+
+    with st.container(key="reset_gate"):
+        st.markdown(
+            '<div class="analytics-gate-copy">초기화 전용 비밀번호를 입력해 주세요.</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("reset_password_form", clear_on_submit=True):
+            password = st.text_input(
+                "초기화 비밀번호",
+                type="password",
+                placeholder="초기화용 비밀번호 입력",
+                autocomplete="current-password",
+            )
+            submitted = st.form_submit_button(
+                "초기화 기능 열기", type="primary", use_container_width=True
+            )
+        if submitted:
+            if service.verify_reset_password(password):
+                st.session_state["reset_authenticated"] = True
                 st.rerun()
             st.error("비밀번호가 올바르지 않습니다.")
     return False
