@@ -15,6 +15,7 @@ def service(tmp_path):
         field_encryption_key=Fernet.generate_key().decode("ascii"),
         operator_password="test-operator-password",
         analytics_password="test-analytics-password",
+        reset_password="test-reset-password",
     )
     _engine, factory = create_db(config)
     return LoungeService(factory, config)
@@ -210,6 +211,12 @@ def test_analytics_uses_a_different_password(service: LoungeService):
     assert service.analytics_password_issue() == ""
     assert service.verify_analytics_password("test-analytics-password") is True
     assert service.verify_analytics_password("test-operator-password") is False
+
+
+def test_reset_uses_a_different_password(service: LoungeService):
+    assert service.reset_password_issue() == ""
+    assert service.verify_reset_password("test-reset-password") is True
+    assert service.verify_reset_password("test-operator-password") is False
 
 
 def test_visit_analytics_tracks_attendance_without_point_history(service: LoungeService):
