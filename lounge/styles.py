@@ -283,6 +283,17 @@ input, textarea { color: var(--cream) !important; }
 .quick-result.success { color: #baf5d5; border: 1px solid rgba(91,227,159,.35); background: rgba(42,128,91,.2); }
 .quick-result.error { color: #ffd0d0; border: 1px solid rgba(200,95,95,.45); background: rgba(139,44,44,.2); }
 
+.st-key-operator_gate {
+  max-width: 580px; margin: 2.2rem auto 0; padding: 1.5rem;
+  border: 1px solid rgba(220,191,115,.3); border-radius: 22px;
+  background: radial-gradient(circle at 100% 0%,rgba(220,191,115,.12),transparent 48%),rgba(13,32,27,.92);
+  box-shadow: 0 24px 65px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.04);
+}
+.operator-gate-copy { color: var(--muted); text-align: center; margin: 0 0 1rem; }
+.st-key-operator_gate [data-testid="stForm"] { padding: 0; border: 0; background: transparent; }
+.st-key-operator_gate [data-baseweb="input"] > div { min-height: 58px; border-radius: 14px; }
+.st-key-operator_gate input { min-height: 56px; font-size: 1.1rem !important; text-align: center; }
+
 .stButton > button, .stDownloadButton > button, .stLinkButton > a {
   border-radius: 12px; min-height: 2.75rem; font-weight: 800;
   border: 1px solid rgba(220,191,115,.4); background: rgba(220,191,115,.08); color: var(--gold-soft);
