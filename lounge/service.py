@@ -26,6 +26,7 @@ from .security import (
     encrypt_text,
     mask_phone,
     new_display_code,
+    new_internal_record_key,
     normalize_phone,
     phone_digest,
     validate_phone,
@@ -176,10 +177,16 @@ class LoungeService:
             if active_duplicate:
                 raise ValueError("이미 입장 처리된 전화번호입니다. 운영자에게 문의해 주세요.")
 
-            used_codes = set(session.scalars(select(Participant.display_code)).all())
+            used_codes = set(
+                session.scalars(
+                    select(Participant.active_code).where(Participant.active_code.is_not(None))
+                ).all()
+            )
+            used_keys = set(session.scalars(select(Participant.legacy_key)).all())
             code = new_display_code(used_codes)
             participant = Participant(
-                display_code=code,
+                legacy_key=new_internal_record_key(used_keys),
+                active_code=code,
                 name=name,
                 age=int(age),
                 phone_encrypted=encrypt_text(normalized_phone, self.config.field_encryption_key),
@@ -211,7 +218,7 @@ class LoungeService:
                 "check_in",
                 "kiosk",
                 participant.id,
-                {"category": category, "code": code},
+                {"category": category},
             )
             return CheckInResult(participant.id, code, starting_points)
 
@@ -219,7 +226,7 @@ class LoungeService:
         phone = decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
         return {
             "id": row.id,
-            "code": row.display_code,
+            "code": row.active_code or "",
             "name": row.name,
             "age": row.age,
             "phone": phone if reveal_phone else mask_phone(phone),
@@ -247,7 +254,7 @@ class LoungeService:
             if query:
                 choices = [
                     Participant.name.ilike(f"%{query}%"),
-                    Participant.display_code.ilike(f"%{query.upper()}%"),
+                    Participant.active_code.ilike(f"%{query.upper()}%"),
                 ]
                 if normalized:
                     choices.append(Participant.phone_last4.like(f"%{normalized[-4:]}%"))
@@ -272,7 +279,7 @@ class LoungeService:
             row = session.scalar(
                 select(Participant).where(
                     and_(
-                        Participant.display_code == normalized,
+                        Participant.active_code == normalized,
                         Participant.status == "active",
                     )
                 )
@@ -296,7 +303,7 @@ class LoungeService:
                     and_(
                         Participant.name == normalized_name,
                         Participant.phone_hash == phone_digest(normalized_phone),
-                        Participant.display_code == normalized_code,
+                        Participant.active_code == normalized_code,
                         Participant.status == "active",
                     )
                 )
@@ -368,12 +375,10 @@ class LoungeService:
         if spent == 0 and earned == 0:
             raise ValueError("사용 칩과 획득 점수가 모두 0일 수는 없습니다.")
         delta = earned - spent
-        normalized_command = f"{spent}{code}{earned}"
-
         with DB_WRITE_LOCK, self.sessions.begin() as session:
             participant = session.scalar(
                 select(Participant).where(
-                    and_(Participant.display_code == code, Participant.status == "active")
+                    and_(Participant.active_code == code, Participant.status == "active")
                 )
             )
             if not participant:
@@ -390,7 +395,7 @@ class LoungeService:
                     delta=delta,
                     balance_after=new_balance,
                     activity="칩 사용·게임 점수 기록",
-                    note=f"사용 {spent}P · 획득 {earned}P · {normalized_command}",
+                    note=f"사용 {spent}P · 획득 {earned}P",
                     operator=operator[:40],
                     created_at=utcnow(),
                 )
@@ -405,7 +410,6 @@ class LoungeService:
                     "earned": earned,
                     "delta": delta,
                     "balance": new_balance,
-                    "command": normalized_command,
                 },
             )
             return QuickPointResult(
@@ -457,6 +461,7 @@ class LoungeService:
                 participant_id,
                 {"final_points": final_points},
             )
+            participant.active_code = None
 
     def reopen_participant(self, participant_id: int, operator: str) -> None:
         with DB_WRITE_LOCK, self.sessions.begin() as session:
@@ -467,6 +472,12 @@ class LoungeService:
             participant.checked_out_at = None
             participant.final_points = None
             participant.exit_note = ""
+            used_codes = set(
+                session.scalars(
+                    select(Participant.active_code).where(Participant.active_code.is_not(None))
+                ).all()
+            )
+            participant.active_code = new_display_code(used_codes)
             self._audit(session, "check_out_reverted", operator, participant_id)
 
     @staticmethod
@@ -584,7 +595,7 @@ class LoungeService:
             visits.append(
                 {
                     "name": row.name,
-                    "code": row.display_code,
+                    "code": row.active_code or "",
                     "age": row.age,
                     "phone": mask_phone(
                         decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
@@ -632,7 +643,7 @@ class LoungeService:
     def _public_participant(self, row: Participant) -> dict[str, Any]:
         return {
             "name": self._public_name(row),
-            "code": row.display_code,
+            "code": row.active_code or "",
             "category": row.category,
             "status": row.status,
             "points": row.current_points,
@@ -676,7 +687,7 @@ class LoungeService:
     def recent_transactions(self, limit: int = 20) -> list[dict[str, Any]]:
         with self.sessions() as session:
             rows = session.execute(
-                select(PointTransaction, Participant.name, Participant.display_code)
+                select(PointTransaction, Participant.name, Participant.active_code)
                 .join(Participant, Participant.id == PointTransaction.participant_id)
                 .order_by(desc(PointTransaction.created_at))
                 .limit(limit)
@@ -699,7 +710,6 @@ class LoungeService:
         writer = csv.writer(output)
         writer.writerow(
             [
-                "입장코드",
                 "이름",
                 "나이",
                 "전화번호",
@@ -718,7 +728,6 @@ class LoungeService:
                 item = self._participant_dict(row, reveal_phone=True)
                 writer.writerow(
                     [
-                        item["code"],
                         item["name"],
                         item["age"],
                         item["phone"],
@@ -736,18 +745,17 @@ class LoungeService:
     def export_transactions_csv(self) -> bytes:
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["시각", "입장코드", "이름", "변동", "잔액", "활동", "메모", "운영자"])
+        writer.writerow(["시각", "이름", "변동", "잔액", "활동", "메모", "운영자"])
         with self.sessions() as session:
             rows = session.execute(
-                select(PointTransaction, Participant.name, Participant.display_code)
+                select(PointTransaction, Participant.name)
                 .join(Participant, Participant.id == PointTransaction.participant_id)
                 .order_by(PointTransaction.created_at)
             ).all()
-            for tx, name, code in rows:
+            for tx, name in rows:
                 writer.writerow(
                     [
                         self.format_time(tx.created_at, include_date=True),
-                        code,
                         name,
                         tx.delta,
                         tx.balance_after,
