@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hmac
 import io
 import json
 import re
@@ -28,7 +29,6 @@ from .security import (
     normalize_phone,
     phone_digest,
     validate_phone,
-    verify_operator_password,
 )
 
 UTC = timezone.utc
@@ -118,7 +118,8 @@ class LoungeService:
             self._audit(session, "settings_update", operator, details=values)
 
     def verify_operator_password(self, password: str) -> bool:
-        return verify_operator_password(password)
+        expected = self.config.operator_password
+        return bool(expected) and hmac.compare_digest(password or "", expected)
 
     def check_in(
         self,
