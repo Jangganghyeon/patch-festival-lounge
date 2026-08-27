@@ -61,7 +61,7 @@ def render_home(service: LoungeService) -> None:
         (
             "02",
             "퇴장 처리",
-            "이름·전화번호·두 글자 ID를 확인하고 퇴장을 완료합니다.",
+            "이름·전화번호·고유 ID를 확인하고 퇴장을 완료합니다.",
             "퇴장 화면 열기",
             "?view=checkout",
         ),
@@ -167,10 +167,10 @@ def render_checkout(service: LoungeService) -> None:
             )
             code = st.text_input(
                 "참가자 ID",
-                max_chars=2,
+                max_chars=4,
                 placeholder="RT",
                 key="checkout_code_input",
-                help="입장할 때 발급받은 영문 두 글자를 입력하세요.",
+                help="입장할 때 발급받은 영문 2~4글자 고유 ID를 입력하세요.",
             )
             identity_submitted = st.form_submit_button(
                 "입장 정보 확인", use_container_width=True
@@ -230,6 +230,7 @@ def render_kiosk(service: LoungeService) -> None:
 
     if st.session_state.get("last_ticket"):
         ticket = st.session_state["last_ticket"]
+        point_label = "현재 포인트" if ticket["is_returning"] else "시작 포인트"
         if "last_ticket_expires_at" not in st.session_state:
             st.session_state["last_ticket_expires_at"] = time.monotonic() + 10
         st.markdown(
@@ -239,9 +240,9 @@ def render_kiosk(service: LoungeService) -> None:
               <div style="margin:.8rem 0 1.3rem;color:#f7f1df;font-size:1.35rem;font-weight:800">환영합니다, {esc(ticket["name"])}님</div>
               <div class="ticket-memory-label">반드시 기억하세요</div>
               <div class="ticket-code">{esc(ticket["code"])}</div>
-              <div class="ticket-memory-title">이 두 글자가 나의 참가자 ID입니다</div>
+              <div class="ticket-memory-title">이 문자가 나의 고유 참가자 ID입니다</div>
               <div class="ticket-memory-copy">활동 포인트를 받을 때마다 운영진에게 이 ID를 말해 주세요.</div>
-              <div style="color:#a5b6ae;margin-top:.75rem">시작 포인트 {ticket["points"]:,} P</div>
+              <div style="color:#a5b6ae;margin-top:.75rem">입장 횟수 {ticket["entry_count"]} / 5 · {point_label} {ticket["points"]:,} P</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -313,6 +314,8 @@ def render_kiosk(service: LoungeService) -> None:
                 "name": name.strip(),
                 "code": result.display_code,
                 "points": result.starting_points,
+                "entry_count": result.entry_count,
+                "is_returning": result.is_returning,
             }
             st.session_state["last_ticket_expires_at"] = time.monotonic() + 10
             st.rerun()
@@ -538,7 +541,7 @@ def render_admin(service: LoungeService) -> None:
             (
                 "01",
                 "전산 칩 관리",
-                "두 글자 ID와 포인트를 입력해 가장 빠르게 기록합니다.",
+                "참가자 ID와 포인트를 입력해 가장 빠르게 기록합니다.",
                 "전산 칩 관리 열기",
                 "chips",
             ),
@@ -729,10 +732,10 @@ def _visit_details_html(visits: list[dict]) -> str:
         category = "VIP" if visit["category"] == "vip" else "일반"
         status = "입장 중" if visit["status"] == "active" else "퇴장"
         status_class = "active" if visit["status"] == "active" else "exited"
-        code_label = f'ID {esc(visit["code"])}' if visit["code"] else "임시 ID 해제됨"
+        code_label = f'ID {esc(visit["code"])}'
         rows.append(
             f'<div class="visit-row"><div><div class="visit-name">{esc(visit["name"])}</div>'
-            f'<div class="visit-meta">{code_label} · {category} · '
+            f'<div class="visit-meta">{code_label} · {visit["visit_number"]}/{visit["entry_count"]}회 · {category} · '
             f'{esc(visit["age"])}세 · {esc(visit["phone"])}</div></div>'
             f'<div class="visit-time"><span>입장 {esc(visit["checked_in"])}</span>'
             f'<span>퇴장 {esc(visit["checked_out"])}</span></div>'
@@ -789,7 +792,7 @@ def render_analytics(service: LoungeService) -> None:
 
 def _quick_points_console(service: LoungeService, operator: str) -> None:
     st.markdown(
-        '<div class="quick-guide"><strong>사용 칩 + 두 글자 ID + 획득 점수</strong>'
+        '<div class="quick-guide"><strong>앞 수치 + 참가자 ID + 뒤 수치</strong>'
         '<span>입력창은 자동으로 선택됩니다. 예: <b>300RT140</b> 입력 후 Enter</span></div>',
         unsafe_allow_html=True,
     )
@@ -826,6 +829,7 @@ def _participant_list(service: LoungeService, operator: str) -> None:
         {
             "ID": row["code"] or "—",
             "이름": row["name"],
+            "입장 회차": f'{row["visit_number"]}/{row["entry_count"]}',
             "상태": "입장 중" if row["status"] == "active" else "퇴장",
             "포인트": row["points"],
             "입장": service.format_time(row["checked_in_at"], include_date=True),
@@ -840,7 +844,10 @@ def _participant_list(service: LoungeService, operator: str) -> None:
     if exited:
         st.markdown("#### 잘못 처리한 퇴장 복구")
         labels = {
-            row["id"]: f"{row['name']} · {service.format_time(row['checked_out_at'], True)}"
+            row["id"]: (
+                f"{row['name']} · {row['visit_number']}회차 · "
+                f"{service.format_time(row['checked_out_at'], True)}"
+            )
             for row in exited
         }
         chosen = st.selectbox("복구할 참가자", list(labels), format_func=lambda value: labels[value])
