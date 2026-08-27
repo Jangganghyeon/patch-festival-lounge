@@ -361,10 +361,15 @@ input, textarea { color: var(--cream) !important; }
   border: 1px solid rgba(232,114,91,.34); border-radius: 22px;
   background: rgba(47,25,22,.9); box-shadow: 0 20px 55px rgba(0,0,0,.22);
 }
+.st-key-checkout_station .react-aria-TextField,
+.st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"],
 .st-key-checkout_station [data-baseweb="input"] > div,
+.st-key-checkout_station [data-baseweb="base-input"] { height: 104px; min-height: 104px; }
+.st-key-checkout_station [data-testid="stTextInputRootElement"],
+.st-key-checkout_station [data-baseweb="input"] > div,
 .st-key-checkout_station [data-baseweb="base-input"] {
-  min-height: 104px; border-radius: 16px; border-color: rgba(255,155,131,.48) !important;
+  overflow: hidden; border-radius: 16px; border-color: rgba(255,155,131,.48) !important;
   background: #261714 !important;
 }
 .st-key-checkout_station input {
@@ -455,9 +460,11 @@ input, textarea { color: var(--cream) !important; }
   .st-key-kiosk_guest_card:after { display: none; }
   .st-key-check_in_kiosk input { font-size: 1.15rem !important; }
   .checkout-hero { padding:1.35rem; }
+  .st-key-checkout_station .react-aria-TextField,
+  .st-key-checkout_station [data-testid="stTextInputRootElement"],
   .st-key-checkout_station [data-baseweb="input"],
   .st-key-checkout_station [data-baseweb="input"] > div,
-  .st-key-checkout_station [data-baseweb="base-input"] { min-height:84px; }
+  .st-key-checkout_station [data-baseweb="base-input"] { height:84px; min-height:84px; }
   .st-key-checkout_station input {
     height:84px !important; min-height:84px; font-size:2.1rem !important;
   }

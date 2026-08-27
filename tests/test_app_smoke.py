@@ -52,7 +52,7 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     assert len(app.get("link_button")) == 0
     kiosk_markup = "\n".join(element.value for element in app.markdown)
     assert "ADMISSION PASS · 참가 등록" in kiosk_markup
-    assert "나만의 참가자 ID를 발급받아 보세요" in kiosk_markup
+    assert "입장 등록" in kiosk_markup
     assert "입장권 발급 준비" in kiosk_markup
     assert "01 · GUEST PROFILE" in kiosk_markup
     assert "02 · FESTIVAL ACCESS" in kiosk_markup
@@ -245,6 +245,12 @@ def test_checkout_requires_name_phone_and_id_before_confirmation(tmp_path, monke
         timeout=20
     )
     assert service.get_participant(participant.participant_id)["status"] == "exited"
+    assert any("자동 전환됩니다" in caption.value for caption in app.caption)
+
+    app.session_state["checkout_complete_expires_at"] = 0.0
+    app.run(timeout=20)
+    assert "checkout_complete" not in app.session_state
+    assert all(field.value == "" for field in app.text_input)
 
 
 def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):

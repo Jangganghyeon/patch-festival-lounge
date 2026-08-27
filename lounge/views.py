@@ -134,12 +134,35 @@ def render_checkout(service: LoungeService) -> None:
         unsafe_allow_html=True,
     )
 
+    def clear_checkout_flow() -> None:
+        for key in (
+            "checkout_complete",
+            "checkout_complete_expires_at",
+            "checkout_candidate_code",
+            "checkout_name_input",
+            "checkout_phone_input",
+            "checkout_code_input",
+        ):
+            st.session_state.pop(key, None)
+
     if st.session_state.get("checkout_complete"):
         completed = st.session_state["checkout_complete"]
+        if "checkout_complete_expires_at" not in st.session_state:
+            st.session_state["checkout_complete_expires_at"] = time.monotonic() + 10
         st.success(f"{completed['code']} · {completed['name']}님의 퇴장이 완료되었습니다.")
+
+        @st.fragment(run_every=timedelta(seconds=1))
+        def checkout_auto_advance() -> None:
+            expires_at = float(st.session_state.get("checkout_complete_expires_at", 0))
+            remaining = max(0, math.ceil(expires_at - time.monotonic()))
+            if remaining == 0:
+                clear_checkout_flow()
+                st.rerun()
+            st.caption(f"{remaining}초 후 다음 참가자 퇴장 화면으로 자동 전환됩니다.")
+
+        checkout_auto_advance()
         if st.button("다음 참가자 퇴장", type="primary", use_container_width=True):
-            st.session_state.pop("checkout_complete", None)
-            st.session_state.pop("checkout_candidate_code", None)
+            clear_checkout_flow()
             st.rerun()
         footer()
         return
@@ -207,6 +230,7 @@ def render_checkout(service: LoungeService) -> None:
                         "code": candidate["code"],
                         "name": candidate["name"],
                     }
+                    st.session_state["checkout_complete_expires_at"] = time.monotonic() + 10
                     st.session_state.pop("checkout_candidate_code", None)
                     st.rerun()
             except ValueError as exc:
@@ -265,7 +289,7 @@ def render_kiosk(service: LoungeService) -> None:
             st.markdown(
                 "<div class='kiosk-ticket-heading'>"
                 "<div class='ticket-label'>ADMISSION PASS · 참가 등록</div>"
-                "<div class='kiosk-ticket-title'>나만의 참가자 ID를 발급받아 보세요</div>"
+                "<div class='kiosk-ticket-title'>입장 등록</div>"
                 "<div class='kiosk-ticket-copy'>입장 정보를 입력하면 활동 포인트에 사용할 고유 ID가 발급됩니다.</div>"
                 "<div class='kiosk-ticket-badge'>입장권 발급 준비</div>"
                 "</div>",
