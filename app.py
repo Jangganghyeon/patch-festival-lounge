@@ -30,7 +30,7 @@ st.set_page_config(
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 
-DATABASE_SCHEMA_VERSION = 4
+DATABASE_SCHEMA_VERSION = 5
 
 
 @st.cache_resource

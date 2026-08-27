@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 
 import pytest
 from cryptography.fernet import Fernet
 
 from lounge.config import RuntimeConfig
-from lounge.database import AuditLog, Participant, PointTransaction, create_db
+from lounge.database import (
+    AuditLog,
+    Participant,
+    ParticipantIdentity,
+    PointTransaction,
+    create_db,
+)
 from lounge.service import LoungeService
 
 
@@ -36,7 +43,7 @@ def check_in(service: LoungeService, phone: str = "010-1234-5678", **overrides):
     return service.check_in(**values)
 
 
-def test_existing_database_migrates_historical_codes_to_temporary_field(tmp_path):
+def test_existing_database_migrates_historical_codes_to_permanent_identities(tmp_path):
     database_path = tmp_path / "legacy.db"
     connection = sqlite3.connect(database_path)
     connection.executescript(
@@ -80,6 +87,18 @@ def test_existing_database_migrates_historical_codes_to_temporary_field(tmp_path
         assert active.legacy_key != "AA"
         assert exited is not None and exited.active_code is None
         assert exited.legacy_key != "BB"
+        assert active.identity is not None and active.identity.permanent_code == "AA"
+        assert exited.identity is not None and exited.identity.permanent_code == "BB"
+        assert active.identity.entry_count == 1
+        assert exited.identity.entry_count == 1
+
+    _engine, second_factory = create_db(config)
+    with second_factory() as session:
+        identities = session.query(ParticipantIdentity).order_by(ParticipantIdentity.id).all()
+        assert [(row.permanent_code, row.entry_count) for row in identities] == [
+            ("AA", 1),
+            ("BB", 1),
+        ]
 
 
 def test_full_visit_flow(service: LoungeService):
@@ -138,7 +157,7 @@ def test_quick_point_command_rejects_invalid_input(service: LoungeService):
     with pytest.raises(ValueError, match="300RT140"):
         service.quick_adjust_points("잘못된 입력", "operator")
 
-    with pytest.raises(ValueError, match="두 글자 ID"):
+    with pytest.raises(ValueError, match="300RT140"):
         service.quick_adjust_points("77H1230", "operator")
 
 
@@ -167,9 +186,92 @@ def test_same_phone_can_reenter_after_checkout(service: LoungeService):
     service.check_out(first.participant_id, 0, "", "operator")
     second = check_in(service)
     assert second.participant_id != first.participant_id
+    assert second.display_code == first.display_code
+    assert second.entry_count == 2
+    assert second.is_returning is True
 
 
-def test_temporary_code_is_released_on_checkout_and_can_be_reused(
+def test_reentry_keeps_person_state_and_does_not_repeat_starting_grant(
+    service: LoungeService,
+):
+    first = check_in(service)
+    service.adjust_points(first.participant_id, 25, "상태 유지 확인", "", "operator")
+    service.check_out(first.participant_id, 25, "", "operator")
+
+    second = check_in(service)
+    assert second.display_code == first.display_code
+    assert second.starting_points == 25
+    assert service.get_participant(second.participant_id)["points"] == 25
+
+
+def test_sixth_check_in_is_blocked_without_creating_a_visit(service: LoungeService):
+    first = check_in(service)
+    code = first.display_code
+    latest_id = first.participant_id
+    for expected_count in range(2, 6):
+        service.check_out(latest_id, 0, "", "operator")
+        entered = check_in(service, phone="01012345678", name="  홍길동  ")
+        assert entered.display_code == code
+        assert entered.entry_count == expected_count
+        latest_id = entered.participant_id
+
+    service.check_out(latest_id, 0, "", "operator")
+    with pytest.raises(ValueError, match="5회를 모두 사용"):
+        check_in(service)
+
+    with service.sessions() as session:
+        identity = session.scalar(
+            session.query(ParticipantIdentity).where(
+                ParticipantIdentity.permanent_code == code
+            ).statement
+        )
+        assert identity is not None and identity.entry_count == 5
+        assert session.query(Participant).filter_by(identity_id=identity.id).count() == 5
+
+
+def test_677th_distinct_person_receives_three_letter_code(
+    service: LoungeService, monkeypatch
+):
+    monkeypatch.setattr("lounge.security.secrets.choice", lambda choices: choices[0])
+    with service.sessions.begin() as session:
+        for first in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            for second in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                code = first + second
+                session.add(
+                    ParticipantIdentity(
+                        identity_hash=f"reserved-{code}",
+                        permanent_code=code,
+                        entry_count=1,
+                        is_active=False,
+                        created_at=datetime(2026, 8, 27),
+                    )
+                )
+
+    result = check_in(service, phone="010-9000-0677", name="육백칠십칠")
+    assert result.display_code == "AAA"
+    assert len(result.display_code) == 3
+    assert service.active_participant_by_code("aaa")["id"] == result.participant_id
+    verified = service.verify_checkout_identity(
+        name="육백칠십칠",
+        phone="01090000677",
+        code="aaa",
+    )
+    assert verified["id"] == result.participant_id
+
+
+def test_public_display_reset_keeps_permanent_identity_and_entry_count(
+    service: LoungeService,
+):
+    first = check_in(service)
+    service.check_out(first.participant_id, 0, "", "operator")
+    service.reset_public_display("operator")
+
+    second = check_in(service)
+    assert second.display_code == first.display_code
+    assert second.entry_count == 2
+
+
+def test_permanent_code_is_kept_after_checkout_and_never_reused(
     service: LoungeService, monkeypatch
 ):
     monkeypatch.setattr("lounge.security.secrets.choice", lambda choices: choices[0])
@@ -178,14 +280,16 @@ def test_temporary_code_is_released_on_checkout_and_can_be_reused(
 
     service.check_out(first.participant_id, 0, "", "operator")
     exited = service.get_participant(first.participant_id)
-    assert exited["code"] == ""
+    assert exited["code"] == "AA"
     with service.sessions() as session:
         row = session.get(Participant, first.participant_id)
         assert row.active_code is None
         assert row.legacy_key != first.display_code
+        assert row.identity is not None and row.identity.permanent_code == "AA"
 
     second = check_in(service, phone="010-7000-0002", name="다음방문")
-    assert second.display_code == first.display_code
+    assert second.display_code == "AB"
+    assert second.display_code != first.display_code
 
 
 def test_checkout_identity_requires_matching_name_phone_and_code(service: LoungeService):
@@ -268,11 +372,12 @@ def test_export_is_utf8_bom_csv(service: LoungeService):
     payload = service.export_participants_csv()
     assert payload.startswith(b"\xef\xbb\xbf")
     assert "홍길동" in payload.decode("utf-8-sig")
-    assert participant.display_code not in payload.decode("utf-8-sig")
-    assert "입장코드" not in payload.decode("utf-8-sig")
+    assert participant.display_code in payload.decode("utf-8-sig")
+    assert "참가자ID" in payload.decode("utf-8-sig")
+    assert "입장회차" in payload.decode("utf-8-sig")
 
 
-def test_stored_logs_and_transaction_exports_do_not_keep_temporary_codes(
+def test_stored_logs_and_transaction_exports_do_not_duplicate_permanent_codes(
     service: LoungeService,
 ):
     participant = check_in(service)
@@ -326,5 +431,7 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     general_visit = next(visit for visit in stats["visits"] if visit["name"] == "일반방문")
     assert general_visit["age"] == 17
     assert general_visit["phone"] == "010-****-5555"
-    assert general_visit["code"] == ""
+    assert general_visit["code"] == general.display_code
+    assert general_visit["visit_number"] == 1
+    assert general_visit["entry_count"] == 1
     assert all("points" not in visit for visit in stats["visits"])
