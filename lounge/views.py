@@ -262,6 +262,15 @@ def render_kiosk(service: LoungeService) -> None:
 
     with st.container(key="check_in_kiosk"):
         with st.form("check_in_form", clear_on_submit=False):
+            st.markdown(
+                "<div class='kiosk-ticket-heading'>"
+                "<div class='ticket-label'>ADMISSION PASS · 참가 등록</div>"
+                "<div class='kiosk-ticket-title'>나만의 참가자 ID를 발급받아 보세요</div>"
+                "<div class='kiosk-ticket-copy'>입장 정보를 입력하면 활동 포인트에 사용할 고유 ID가 발급됩니다.</div>"
+                "<div class='kiosk-ticket-badge'>입장권 발급 준비</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
             left, right = st.columns(2, gap="large")
             with left:
                 with st.container(key="kiosk_guest_card"):

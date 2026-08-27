@@ -51,6 +51,9 @@ def test_kiosk_submit_shows_admission_ticket(tmp_path, monkeypatch):
     app.run(timeout=20)
     assert len(app.get("link_button")) == 0
     kiosk_markup = "\n".join(element.value for element in app.markdown)
+    assert "ADMISSION PASS · 참가 등록" in kiosk_markup
+    assert "나만의 참가자 ID를 발급받아 보세요" in kiosk_markup
+    assert "입장권 발급 준비" in kiosk_markup
     assert "01 · GUEST PROFILE" in kiosk_markup
     assert "02 · FESTIVAL ACCESS" in kiosk_markup
     app.text_input[0].input("홍길동")

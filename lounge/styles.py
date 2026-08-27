@@ -29,7 +29,6 @@ html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 [data-testid="stToolbar"] { right: 1rem; }
 [data-testid="stSidebar"] { background: #081612; border-right: 1px solid var(--line); }
 .block-container { max-width: 1180px; padding-top: 2.2rem; padding-bottom: 4rem; }
-.block-container:has(.st-key-check_in_kiosk),
 .block-container:has(.st-key-board_podium) { max-width: 1520px; }
 
 h1, h2, h3 { color: var(--cream) !important; letter-spacing: -.02em; }
@@ -204,20 +203,44 @@ input, textarea { color: var(--cream) !important; }
 [data-baseweb="popover"], [role="listbox"] { background: #10271f !important; }
 
 .st-key-check_in_kiosk [data-testid="stForm"] {
-  padding: .8rem 0 0; border: 0; border-radius: 0; background: transparent;
-  box-shadow: none;
+  position: relative; overflow: hidden; padding: 2rem 2rem 1.7rem;
+  border: 1px solid var(--line); border-radius: 20px;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(220,191,115,.13), transparent 45%),
+    #0c211b;
+  box-shadow: 0 18px 50px rgba(0,0,0,.2);
+}
+.st-key-check_in_kiosk [data-testid="stForm"]:after {
+  content: ''; position: absolute; inset: 12px; z-index: 0; pointer-events: none;
+  border: 1px dashed rgba(220,191,115,.35); border-radius: 14px;
+}
+.st-key-check_in_kiosk [data-testid="stForm"] > * { position: relative; z-index: 1; }
+.kiosk-ticket-heading { padding: .2rem .45rem 1.55rem; }
+.kiosk-ticket-title {
+  color: var(--cream); font-size: clamp(1.65rem,3vw,2.25rem); font-weight: 900;
+  letter-spacing: -.035em; margin: .75rem 0 .35rem;
+}
+.kiosk-ticket-copy { color: var(--muted); font-size: .94rem; }
+.kiosk-ticket-badge {
+  display: inline-block; color: #102018;
+  background: linear-gradient(135deg,#f1dc95,#c49c3c);
+  border-radius: 999px; padding: .5rem .9rem; margin-top: 1rem;
+  font-size: .82rem; font-weight: 900; letter-spacing: .06em;
 }
 .st-key-kiosk_guest_card, .st-key-kiosk_access_card {
-  min-height: 350px; padding: 1.7rem 2rem 1.9rem; position: relative; overflow: hidden;
-  border: 1px solid rgba(220,191,115,.3); border-radius: 24px;
-  background:
-    radial-gradient(circle at 92% 0%, rgba(220,191,115,.12), transparent 42%),
-    linear-gradient(145deg, rgba(17,42,34,.94), rgba(8,24,20,.96));
-  box-shadow: 0 24px 65px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.04);
+  min-height: 285px; padding: 1.25rem 1.4rem 1.4rem; position: relative;
+  border-top: 1px solid rgba(220,191,115,.22);
+  background: linear-gradient(180deg,rgba(220,191,115,.045),transparent 68%);
 }
 .st-key-kiosk_guest_card:before, .st-key-kiosk_access_card:before {
-  content: ''; position: absolute; width: 140px; height: 1px; right: 0; top: 0;
-  background: linear-gradient(90deg,transparent,#f1d98f);
+  position: absolute; right: 1.4rem; top: 1rem;
+  color: rgba(244,223,171,.11); font: 700 3.25rem/1 'Playfair Display',serif;
+}
+.st-key-kiosk_guest_card:before { content: '01'; }
+.st-key-kiosk_access_card:before { content: '02'; }
+.st-key-kiosk_guest_card:after {
+  content: ''; position: absolute; top: 1.2rem; right: -1.1rem; bottom: 1.2rem;
+  border-right: 1px dashed rgba(220,191,115,.22);
 }
 .kiosk-section-kicker {
   color: var(--gold); font-size: .7rem; font-weight: 900; letter-spacing: .2em;
@@ -246,31 +269,28 @@ input, textarea { color: var(--cream) !important; }
 .st-key-check_in_kiosk [data-testid="stRadio"] label { font-size: 1.15rem; margin-right: 1.4rem; }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] { margin-top: 1rem; }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button {
-  min-height: 64px; position: relative; overflow: hidden; isolation: isolate;
-  border: 1px solid rgba(220,191,115,.58) !important; border-radius: 16px;
-  background:
-    radial-gradient(circle at 50% -90%,rgba(244,223,171,.2),transparent 65%),
-    linear-gradient(135deg,#173b31 0%,#0d2922 55%,#132f27 100%) !important;
-  color: var(--cream) !important; font-size: 1.12rem; letter-spacing: .08em;
-  box-shadow: 0 16px 38px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.08);
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
+  min-height: 60px; position: relative; overflow: hidden; isolation: isolate;
+  border: 1px solid rgba(255,235,170,.45) !important; border-radius: 14px;
+  background: linear-gradient(135deg,#dfc879,#ad8a3d) !important;
+  color: #102018 !important; font-size: 1.06rem; letter-spacing: .04em;
+  box-shadow: 0 13px 28px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.32);
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
 }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:before {
-  content: ''; position: absolute; inset: 0; z-index: -1; opacity: 0;
-  background: linear-gradient(110deg,transparent 18%,rgba(244,223,171,.13) 48%,transparent 78%);
-  transform: translateX(-35%); transition: opacity .2s ease, transform .45s ease;
+  content: ''; position: absolute; inset: 0; z-index: -1; opacity: .35;
+  background: linear-gradient(110deg,transparent 18%,rgba(255,248,210,.55) 48%,transparent 78%);
+  transform: translateX(-65%); transition: opacity .2s ease, transform .5s ease;
 }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:hover {
-  transform: translateY(-2px); border-color: rgba(244,223,171,.9) !important;
-  background:
-    radial-gradient(circle at 50% -70%,rgba(244,223,171,.26),transparent 68%),
-    linear-gradient(135deg,#1b473a 0%,#103128 55%,#17382e 100%) !important;
-  color: #fff6d9 !important;
-  box-shadow: 0 20px 46px rgba(0,0,0,.32), 0 0 0 3px rgba(220,191,115,.08),
-    inset 0 1px rgba(255,255,255,.12);
+  transform: translateY(-2px); filter: brightness(1.08);
+  border-color: rgba(255,242,194,.72) !important;
+  background: linear-gradient(135deg,#ead58a,#bb9848) !important;
+  color: #0b1713 !important;
+  box-shadow: 0 18px 36px rgba(0,0,0,.28), 0 0 0 3px rgba(220,191,115,.08),
+    inset 0 1px rgba(255,255,255,.4);
 }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:hover:before {
-  opacity: 1; transform: translateX(35%);
+  opacity: .7; transform: translateX(65%);
 }
 .st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:active {
   transform: translateY(0); box-shadow: 0 10px 24px rgba(0,0,0,.28), inset 0 2px 8px rgba(0,0,0,.18);
@@ -429,7 +449,10 @@ input, textarea { color: var(--cream) !important; }
   .podium-2 .podium-step { height: 105px; }
   .podium-3 .podium-step { height: 75px; }
   .quick-guide { align-items: flex-start; flex-direction: column; }
-  .st-key-kiosk_guest_card, .st-key-kiosk_access_card { min-height: auto; padding: 1.35rem; }
+  .st-key-check_in_kiosk [data-testid="stForm"] { padding: 1.45rem 1.1rem 1.25rem; }
+  .kiosk-ticket-heading { padding: .2rem .5rem 1rem; }
+  .st-key-kiosk_guest_card, .st-key-kiosk_access_card { min-height: auto; padding: 1.15rem .55rem; }
+  .st-key-kiosk_guest_card:after { display: none; }
   .st-key-check_in_kiosk input { font-size: 1.15rem !important; }
   .checkout-hero { padding:1.35rem; }
   .st-key-checkout_station [data-baseweb="input"],
