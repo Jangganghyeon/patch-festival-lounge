@@ -357,15 +357,16 @@ input, textarea { color: var(--cream) !important; }
 .checkout-title { color:#fff0eb; font-size:clamp(2.2rem,6vw,4.2rem); font-weight:900; margin:.3rem 0; }
 .checkout-copy { color:#d7aaa0; font-size:1rem; }
 .st-key-checkout_station {
-  max-width: 720px; margin: 1.6rem auto; padding: 1.4rem;
+  max-width: 720px; margin: .5rem auto; padding: 1rem;
   border: 1px solid rgba(232,114,91,.34); border-radius: 22px;
   background: rgba(47,25,22,.9); box-shadow: 0 20px 55px rgba(0,0,0,.22);
 }
+.st-key-checkout_station [data-testid="stForm"] { padding: .9rem; }
 .st-key-checkout_station .react-aria-TextField,
 .st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"],
 .st-key-checkout_station [data-baseweb="input"] > div,
-.st-key-checkout_station [data-baseweb="base-input"] { height: 62px; min-height: 62px; }
+.st-key-checkout_station [data-baseweb="base-input"] { height: 40px; min-height: 40px; }
 .st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"] > div,
 .st-key-checkout_station [data-baseweb="base-input"] {
@@ -374,12 +375,12 @@ input, textarea { color: var(--cream) !important; }
 }
 .st-key-checkout_station input {
   height:60px !important; min-height:60px; padding:.75rem 1rem !important;
-  box-sizing:border-box; overflow:visible; line-height:1.2 !important;
-  color:#ffd4c8 !important; font-size:1.35rem !important; font-weight:900;
-  letter-spacing:.1em; text-align:center; text-transform:uppercase;
+  box-sizing:border-box; overflow:visible; line-height:1.4 !important;
+  color:#ffd4c8 !important; font-size:1.18rem !important; font-weight:900;
+  letter-spacing:normal; text-align:center; text-transform:uppercase;
 }
 .checkout-confirm-card {
-  margin: 1rem 0; padding: 1.2rem; text-align:center; border-radius:18px;
+  margin: .65rem 0; padding: .9rem; text-align:center; border-radius:18px;
   border:1px solid rgba(255,155,131,.3); background:rgba(255,155,131,.07);
 }
 .checkout-confirm-label { color:#d7aaa0; font-size:.76rem; font-weight:800; letter-spacing:.12em; }
@@ -464,7 +465,7 @@ input, textarea { color: var(--cream) !important; }
   .st-key-checkout_station [data-testid="stTextInputRootElement"],
   .st-key-checkout_station [data-baseweb="input"],
   .st-key-checkout_station [data-baseweb="input"] > div,
-  .st-key-checkout_station [data-baseweb="base-input"] { height:58px; min-height:58px; }
+  .st-key-checkout_station [data-baseweb="base-input"] { height:40px; min-height:40px; }
   .st-key-checkout_station input {
     height:56px !important; min-height:56px; font-size:1.15rem !important;
   }
