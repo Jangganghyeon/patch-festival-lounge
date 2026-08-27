@@ -11,7 +11,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, desc, func, or_, select, update
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from .config import RuntimeConfig
 from .database import (
@@ -19,14 +20,17 @@ from .database import (
     AppSetting,
     AuditLog,
     Participant,
+    ParticipantIdentity,
     PointTransaction,
 )
 from .security import (
     decrypt_text,
     encrypt_text,
+    identity_digest,
     mask_phone,
     new_display_code,
     new_internal_record_key,
+    normalize_name,
     normalize_phone,
     phone_digest,
     validate_phone,
@@ -44,6 +48,8 @@ class CheckInResult:
     participant_id: int
     display_code: str
     starting_points: int
+    entry_count: int
+    is_returning: bool
 
 
 @dataclass(frozen=True)
@@ -154,7 +160,7 @@ class LoungeService:
         privacy_consent: bool,
         leaderboard_opt_in: bool,
     ) -> CheckInResult:
-        name = " ".join(name.strip().split())
+        name = normalize_name(name)
         if not 2 <= len(name) <= 40:
             raise ValueError("이름은 2~40자로 입력해 주세요.")
         if not 7 <= int(age) <= 100:
@@ -165,68 +171,146 @@ class LoungeService:
             raise ValueError("입장 기록을 위한 개인정보 수집 동의가 필요합니다.")
         normalized_phone = validate_phone(phone)
         digest = phone_digest(normalized_phone)
+        fingerprint = identity_digest(name, normalized_phone, self.config.field_encryption_key)
         start_key = "vip_start_points" if category == "vip" else "general_start_points"
-        starting_points = int(self.setting(start_key, "0"))
+        configured_starting_points = int(self.setting(start_key, "0"))
 
-        with DB_WRITE_LOCK, self.sessions.begin() as session:
-            active_duplicate = session.scalar(
-                select(Participant).where(
-                    and_(Participant.phone_hash == digest, Participant.status == "active")
-                )
-            )
-            if active_duplicate:
-                raise ValueError("이미 입장 처리된 전화번호입니다. 운영자에게 문의해 주세요.")
-
-            used_codes = set(
-                session.scalars(
-                    select(Participant.active_code).where(Participant.active_code.is_not(None))
-                ).all()
-            )
-            used_keys = set(session.scalars(select(Participant.legacy_key)).all())
-            code = new_display_code(used_codes)
-            participant = Participant(
-                legacy_key=new_internal_record_key(used_keys),
-                active_code=code,
-                name=name,
-                age=int(age),
-                phone_encrypted=encrypt_text(normalized_phone, self.config.field_encryption_key),
-                phone_hash=digest,
-                phone_last4=normalized_phone[-4:],
-                category=category,
-                status="active",
-                current_points=starting_points,
-                leaderboard_opt_in=bool(leaderboard_opt_in),
-                privacy_consent=True,
-                checked_in_at=utcnow(),
-            )
-            session.add(participant)
-            session.flush()
-            if starting_points:
-                session.add(
-                    PointTransaction(
-                        participant_id=participant.id,
-                        delta=starting_points,
-                        balance_after=starting_points,
-                        activity="입장 기본 포인트",
-                        note=category,
-                        operator="system",
-                        created_at=utcnow(),
+        for attempt in range(3):
+            try:
+                with DB_WRITE_LOCK, self.sessions.begin() as session:
+                    identity = session.scalar(
+                        select(ParticipantIdentity).where(
+                            ParticipantIdentity.identity_hash == fingerprint
+                        )
                     )
-                )
-            self._audit(
-                session,
-                "check_in",
-                "kiosk",
-                participant.id,
-                {"category": category},
-            )
-            return CheckInResult(participant.id, code, starting_points)
+                    is_returning = identity is not None
+                    if identity is None:
+                        known_phone = session.scalar(
+                            select(Participant)
+                            .where(Participant.phone_hash == digest)
+                            .order_by(desc(Participant.checked_in_at), desc(Participant.id))
+                            .limit(1)
+                        )
+                        if known_phone is not None:
+                            if known_phone.status == "active":
+                                raise ValueError(
+                                    "이미 입장 처리된 전화번호입니다. 운영자에게 문의해 주세요."
+                                )
+                            raise ValueError(
+                                "기존 방문 기록의 이름과 일치하지 않습니다. 운영자에게 문의해 주세요."
+                            )
+                        used_codes = set(
+                            session.scalars(select(ParticipantIdentity.permanent_code)).all()
+                        )
+                        identity = ParticipantIdentity(
+                            identity_hash=fingerprint,
+                            permanent_code=new_display_code(used_codes),
+                            entry_count=1,
+                            is_active=True,
+                            created_at=utcnow(),
+                        )
+                        session.add(identity)
+                        session.flush()
+                        current_points = configured_starting_points
+                    else:
+                        latest = session.scalar(
+                            select(Participant)
+                            .where(Participant.identity_id == identity.id)
+                            .order_by(desc(Participant.checked_in_at), desc(Participant.id))
+                            .limit(1)
+                        )
+                        claimed = session.execute(
+                            update(ParticipantIdentity)
+                            .where(
+                                and_(
+                                    ParticipantIdentity.id == identity.id,
+                                    ParticipantIdentity.is_active.is_(False),
+                                    ParticipantIdentity.entry_count < 5,
+                                )
+                            )
+                            .values(
+                                is_active=True,
+                                entry_count=ParticipantIdentity.entry_count + 1,
+                            )
+                        )
+                        if claimed.rowcount != 1:
+                            session.refresh(identity)
+                            if identity.is_active:
+                                raise ValueError(
+                                    "이미 입장 처리된 방문자입니다. 운영자에게 문의해 주세요."
+                                )
+                            raise ValueError(
+                                "입장 가능 횟수 5회를 모두 사용하여 추가 입장이 불가능합니다."
+                            )
+                        session.refresh(identity)
+                        current_points = latest.current_points if latest else configured_starting_points
+
+                    used_keys = set(session.scalars(select(Participant.legacy_key)).all())
+                    participant = Participant(
+                        legacy_key=new_internal_record_key(used_keys),
+                        active_code=identity.permanent_code,
+                        identity_id=identity.id,
+                        visit_number=identity.entry_count,
+                        name=name,
+                        age=int(age),
+                        phone_encrypted=encrypt_text(
+                            normalized_phone, self.config.field_encryption_key
+                        ),
+                        phone_hash=digest,
+                        phone_last4=normalized_phone[-4:],
+                        category=category,
+                        status="active",
+                        current_points=current_points,
+                        leaderboard_opt_in=bool(leaderboard_opt_in),
+                        privacy_consent=True,
+                        checked_in_at=utcnow(),
+                    )
+                    session.add(participant)
+                    session.flush()
+                    if not is_returning and current_points:
+                        session.add(
+                            PointTransaction(
+                                participant_id=participant.id,
+                                delta=current_points,
+                                balance_after=current_points,
+                                activity="입장 기본 포인트",
+                                note=category,
+                                operator="system",
+                                created_at=utcnow(),
+                            )
+                        )
+                    self._audit(
+                        session,
+                        "check_in",
+                        "kiosk",
+                        participant.id,
+                        {
+                            "category": category,
+                            "entry_count": identity.entry_count,
+                            "returning": is_returning,
+                        },
+                    )
+                    return CheckInResult(
+                        participant.id,
+                        identity.permanent_code,
+                        current_points,
+                        identity.entry_count,
+                        is_returning,
+                    )
+            except IntegrityError as exc:
+                if attempt == 2:
+                    raise ValueError(
+                        "동시에 여러 입장 등록이 처리되었습니다. 잠시 후 다시 시도해 주세요."
+                    ) from exc
+
+        raise ValueError("입장 등록을 완료할 수 없습니다.")
 
     def _participant_dict(self, row: Participant, reveal_phone: bool = False) -> dict[str, Any]:
         phone = decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
+        permanent_code = row.identity.permanent_code if row.identity else row.active_code or ""
         return {
             "id": row.id,
-            "code": row.active_code or "",
+            "code": permanent_code,
             "name": row.name,
             "age": row.age,
             "phone": phone if reveal_phone else mask_phone(phone),
@@ -239,6 +323,8 @@ class LoungeService:
             "checked_in_at": row.checked_in_at,
             "checked_out_at": row.checked_out_at,
             "exit_note": row.exit_note,
+            "visit_number": row.visit_number,
+            "entry_count": row.identity.entry_count if row.identity else row.visit_number,
         }
 
     def search_participants(
@@ -247,14 +333,14 @@ class LoungeService:
         query = query.strip()
         normalized = normalize_phone(query)
         with self.sessions() as session:
-            stmt = select(Participant)
+            stmt = select(Participant).join(ParticipantIdentity)
             filters = []
             if active_only:
                 filters.append(Participant.status == "active")
             if query:
                 choices = [
                     Participant.name.ilike(f"%{query}%"),
-                    Participant.active_code.ilike(f"%{query.upper()}%"),
+                    ParticipantIdentity.permanent_code.ilike(f"%{query.upper()}%"),
                 ]
                 if normalized:
                     choices.append(Participant.phone_last4.like(f"%{normalized[-4:]}%"))
@@ -273,13 +359,13 @@ class LoungeService:
 
     def active_participant_by_code(self, code: str) -> dict[str, Any]:
         normalized = (code or "").strip().upper()
-        if not re.fullmatch(r"[A-Z]{2}", normalized):
-            raise ValueError("영문 두 글자 ID를 입력해 주세요.")
+        if not re.fullmatch(r"[A-Z]{2,4}", normalized):
+            raise ValueError("영문 2~4글자 ID를 입력해 주세요.")
         with self.sessions() as session:
             row = session.scalar(
-                select(Participant).where(
+                select(Participant).join(ParticipantIdentity).where(
                     and_(
-                        Participant.active_code == normalized,
+                        ParticipantIdentity.permanent_code == normalized,
                         Participant.status == "active",
                     )
                 )
@@ -289,21 +375,21 @@ class LoungeService:
             return self._participant_dict(row)
 
     def verify_checkout_identity(self, *, name: str, phone: str, code: str) -> dict[str, Any]:
-        normalized_name = " ".join((name or "").strip().split())
+        normalized_name = normalize_name(name)
         normalized_phone = validate_phone(phone)
         normalized_code = (code or "").strip().upper()
         if not 2 <= len(normalized_name) <= 40:
             raise ValueError("이름을 정확히 입력해 주세요.")
-        if not re.fullmatch(r"[A-Z]{2}", normalized_code):
-            raise ValueError("영문 두 글자 ID를 입력해 주세요.")
+        if not re.fullmatch(r"[A-Z]{2,4}", normalized_code):
+            raise ValueError("영문 2~4글자 ID를 입력해 주세요.")
 
         with self.sessions() as session:
             row = session.scalar(
-                select(Participant).where(
+                select(Participant).join(ParticipantIdentity).where(
                     and_(
                         Participant.name == normalized_name,
                         Participant.phone_hash == phone_digest(normalized_phone),
-                        Participant.active_code == normalized_code,
+                        ParticipantIdentity.permanent_code == normalized_code,
                         Participant.status == "active",
                     )
                 )
@@ -366,9 +452,9 @@ class LoungeService:
             return participant.current_points
 
     def quick_adjust_points(self, command: str, operator: str) -> QuickPointResult:
-        match = re.fullmatch(r"\s*(\d{1,6})\s*([A-Za-z]{2})\s*(\d{1,6})\s*", command or "")
+        match = re.fullmatch(r"\s*(\d{1,6})\s*([A-Za-z]{2,4})\s*(\d{1,6})\s*", command or "")
         if not match:
-            raise ValueError("300RT140 형식으로 입력해 주세요: 사용 칩 + 두 글자 ID + 획득 점수")
+            raise ValueError("300RT140 형식으로 입력해 주세요: 앞 수치 + 참가자 ID + 뒤 수치")
         spent = int(match.group(1))
         code = match.group(2).upper()
         earned = int(match.group(3))
@@ -377,8 +463,11 @@ class LoungeService:
         delta = earned - spent
         with DB_WRITE_LOCK, self.sessions.begin() as session:
             participant = session.scalar(
-                select(Participant).where(
-                    and_(Participant.active_code == code, Participant.status == "active")
+                select(Participant).join(ParticipantIdentity).where(
+                    and_(
+                        ParticipantIdentity.permanent_code == code,
+                        Participant.status == "active",
+                    )
                 )
             )
             if not participant:
@@ -461,6 +550,8 @@ class LoungeService:
                 participant_id,
                 {"final_points": final_points},
             )
+            if participant.identity:
+                participant.identity.is_active = False
             participant.active_code = None
 
     def reopen_participant(self, participant_id: int, operator: str) -> None:
@@ -468,16 +559,28 @@ class LoungeService:
             participant = session.get(Participant, participant_id)
             if not participant or participant.status != "exited":
                 raise ValueError("퇴장 완료된 참가자만 복구할 수 있습니다.")
+            if not participant.identity:
+                raise ValueError("영구 ID 정보를 찾을 수 없습니다.")
+            if participant.identity.is_active:
+                raise ValueError("이미 재입장한 방문자의 이전 퇴장 기록은 복구할 수 없습니다.")
+            newer_visit = session.scalar(
+                select(Participant.id)
+                .where(
+                    and_(
+                        Participant.identity_id == participant.identity_id,
+                        Participant.checked_in_at > participant.checked_in_at,
+                    )
+                )
+                .limit(1)
+            )
+            if newer_visit is not None:
+                raise ValueError("가장 최근 방문 기록만 퇴장 취소할 수 있습니다.")
             participant.status = "active"
             participant.checked_out_at = None
             participant.final_points = None
             participant.exit_note = ""
-            used_codes = set(
-                session.scalars(
-                    select(Participant.active_code).where(Participant.active_code.is_not(None))
-                ).all()
-            )
-            participant.active_code = new_display_code(used_codes)
+            participant.identity.is_active = True
+            participant.active_code = participant.identity.permanent_code
             self._audit(session, "check_out_reverted", operator, participant_id)
 
     @staticmethod
@@ -576,6 +679,7 @@ class LoungeService:
         with self.sessions() as session:
             rows = session.scalars(
                 select(Participant)
+                .options(selectinload(Participant.identity))
                 .where(Participant.checked_in_at >= start_utc)
                 .order_by(desc(Participant.checked_in_at))
             ).all()
@@ -595,7 +699,7 @@ class LoungeService:
             visits.append(
                 {
                     "name": row.name,
-                    "code": row.active_code or "",
+                    "code": row.identity.permanent_code if row.identity else row.active_code or "",
                     "age": row.age,
                     "phone": mask_phone(
                         decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
@@ -605,6 +709,8 @@ class LoungeService:
                     "checked_in": self.format_time(row.checked_in_at),
                     "checked_out": self.format_time(row.checked_out_at),
                     "duration_minutes": duration_minutes,
+                    "visit_number": row.visit_number,
+                    "entry_count": row.identity.entry_count if row.identity else row.visit_number,
                 }
             )
 
@@ -643,7 +749,7 @@ class LoungeService:
     def _public_participant(self, row: Participant) -> dict[str, Any]:
         return {
             "name": self._public_name(row),
-            "code": row.active_code or "",
+            "code": row.identity.permanent_code if row.identity else row.active_code or "",
             "category": row.category,
             "status": row.status,
             "points": row.current_points,
@@ -687,8 +793,13 @@ class LoungeService:
     def recent_transactions(self, limit: int = 20) -> list[dict[str, Any]]:
         with self.sessions() as session:
             rows = session.execute(
-                select(PointTransaction, Participant.name, Participant.active_code)
+                select(
+                    PointTransaction,
+                    Participant.name,
+                    ParticipantIdentity.permanent_code,
+                )
                 .join(Participant, Participant.id == PointTransaction.participant_id)
+                .join(ParticipantIdentity, ParticipantIdentity.id == Participant.identity_id)
                 .order_by(desc(PointTransaction.created_at))
                 .limit(limit)
             ).all()
@@ -710,6 +821,7 @@ class LoungeService:
         writer = csv.writer(output)
         writer.writerow(
             [
+                "참가자ID",
                 "이름",
                 "나이",
                 "전화번호",
@@ -720,6 +832,7 @@ class LoungeService:
                 "입장시각",
                 "퇴장시각",
                 "퇴장메모",
+                "입장회차",
             ]
         )
         with self.sessions() as session:
@@ -728,6 +841,7 @@ class LoungeService:
                 item = self._participant_dict(row, reveal_phone=True)
                 writer.writerow(
                     [
+                        item["code"],
                         item["name"],
                         item["age"],
                         item["phone"],
@@ -738,6 +852,7 @@ class LoungeService:
                         self.format_time(item["checked_in_at"], include_date=True),
                         self.format_time(item["checked_out_at"], include_date=True),
                         item["exit_note"],
+                        item["visit_number"],
                     ]
                 )
         return ("\ufeff" + output.getvalue()).encode("utf-8")
@@ -776,7 +891,10 @@ class LoungeService:
                     and_(Participant.status == "exited", Participant.checked_out_at < cutoff)
                 )
             ).all()
+            affected_identity_ids: set[int] = set()
             for row in rows:
+                if row.identity_id is not None:
+                    affected_identity_ids.add(row.identity_id)
                 row.name = f"삭제된 참가자 {row.id}"
                 row.age = 0
                 row.phone_encrypted = encrypt_text("0000000000", self.config.field_encryption_key)
@@ -784,6 +902,19 @@ class LoungeService:
                 row.phone_last4 = "0000"
                 row.leaderboard_opt_in = False
                 count += 1
+            session.flush()
+            for identity_id in affected_identity_ids:
+                remaining = session.scalar(
+                    select(func.count(Participant.id)).where(
+                        and_(
+                            Participant.identity_id == identity_id,
+                            ~Participant.phone_hash.startswith("purged-"),
+                        )
+                    )
+                )
+                identity = session.get(ParticipantIdentity, identity_id)
+                if identity is not None and not remaining and not identity.is_active:
+                    identity.identity_hash = f"purged-{identity.id}"
             self._audit(session, "personal_data_purged", operator, details={"count": count})
         return count
 
