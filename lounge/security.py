@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import itertools
 import re
 import secrets
+import unicodedata
 
 from cryptography.fernet import Fernet, InvalidToken
 
 PHONE_PATTERN = re.compile(r"\D+")
-DISPLAY_CODE_PATTERN = re.compile(r"^[A-Z]{2}$")
+DISPLAY_CODE_PATTERN = re.compile(r"^[A-Z]{2,4}$")
 DISPLAY_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def normalize_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value or "")
+    return " ".join(normalized.strip().split())
 
 
 def normalize_phone(value: str) -> str:
@@ -37,6 +45,16 @@ def phone_digest(normalized_phone: str) -> str:
     return hashlib.sha256(normalized_phone.encode("utf-8")).hexdigest()
 
 
+def identity_digest(name: str, normalized_phone: str, secret: str) -> str:
+    payload = f"{normalize_name(name)}\0{phone_digest(normalized_phone)}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def identity_digest_from_phone_hash(name: str, stored_phone_hash: str, secret: str) -> str:
+    payload = f"{normalize_name(name)}\0{stored_phone_hash}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
 def encrypt_text(value: str, key: str) -> str:
     return Fernet(key.encode("ascii")).encrypt(value.encode("utf-8")).decode("ascii")
 
@@ -54,15 +72,30 @@ def is_display_code(value: str) -> bool:
 
 def new_display_code(excluded: set[str] | None = None) -> str:
     used = {value.upper() for value in (excluded or set())}
-    available = [
-        first + second
-        for first in DISPLAY_CODE_ALPHABET
-        for second in DISPLAY_CODE_ALPHABET
-        if first + second not in used
-    ]
-    if not available:
-        raise ValueError("사용 가능한 두 글자 참가자 ID 676개가 모두 배정되었습니다.")
-    return secrets.choice(available)
+    for length in (2, 3, 4):
+        capacity = len(DISPLAY_CODE_ALPHABET) ** length
+        used_at_length = {value for value in used if len(value) == length}
+        if len(used_at_length) >= capacity:
+            continue
+
+        if length <= 3:
+            available = [
+                "".join(chars)
+                for chars in itertools.product(DISPLAY_CODE_ALPHABET, repeat=length)
+                if "".join(chars) not in used_at_length
+            ]
+            return secrets.choice(available)
+
+        for _attempt in range(1000):
+            candidate = "".join(secrets.choice(DISPLAY_CODE_ALPHABET) for _ in range(length))
+            if candidate not in used_at_length:
+                return candidate
+        for chars in itertools.product(DISPLAY_CODE_ALPHABET, repeat=length):
+            candidate = "".join(chars)
+            if candidate not in used_at_length:
+                return candidate
+
+    raise ValueError("사용 가능한 참가자 ID가 없습니다.")
 
 
 def new_internal_record_key(excluded: set[str] | None = None) -> str:
