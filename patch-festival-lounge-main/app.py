@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import logging
+
+import streamlit as st
+
+from lounge.config import RuntimeConfig, load_config
+from lounge.database import create_db
+from lounge.service import LoungeService
+from lounge.styles import GLOBAL_CSS
+from lounge.views import (
+    footer,
+    render_admin,
+    render_analytics,
+    render_board,
+    render_checkout,
+    render_home,
+    render_kiosk,
+)
+
+st.set_page_config(
+    page_title="PATCH Festival Lounge",
+    page_icon="✦",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+    menu_items={
+        "About": "PATCH 소프트웨어 개발반 학교 축제 운영 시스템",
+    },
+)
+st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+
+
+DATABASE_SCHEMA_VERSION = 5
+
+
+@st.cache_resource
+def get_database(config: RuntimeConfig, schema_version: int):
+    if schema_version < 1:
+        raise ValueError("데이터베이스 버전이 올바르지 않습니다.")
+    return create_db(config)
+
+
+runtime_config = load_config()
+_engine, session_factory = get_database(runtime_config, DATABASE_SCHEMA_VERSION)
+service = LoungeService(session_factory, runtime_config)
+view = str(st.query_params.get("view", "home")).lower()
+
+try:
+    if view == "kiosk":
+        render_kiosk(service)
+    elif view == "checkout":
+        render_checkout(service)
+    elif view == "board":
+        render_board(service)
+    elif view == "admin":
+        render_admin(service)
+    elif view == "analytics":
+        render_analytics(service)
+    else:
+        render_home(service)
+except Exception:
+    logging.exception("Unhandled application error")
+    st.error("화면을 불러오는 중 문제가 발생했습니다. 운영자에게 알려 주세요.")
+    footer()
