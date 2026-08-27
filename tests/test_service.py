@@ -434,6 +434,25 @@ def test_vip_and_general_leaderboards_are_separate(service: LoungeService):
     assert [row["code"] for row in service.leaderboard("vip")] == [vip.display_code]
 
 
+def test_checked_out_participant_remains_on_leaderboard_without_duplicates(
+    service: LoungeService,
+):
+    first = check_in(service, phone="010-5555-5555", name="퇴장후순위")
+    service.adjust_points(first.participant_id, 75, "게임", "", "op")
+    service.check_out(first.participant_id, 100, "", "operator")
+
+    after_checkout = service.leaderboard("general")
+    assert [row["code"] for row in after_checkout] == [first.display_code]
+    assert after_checkout[0]["points"] == 100
+    assert after_checkout[0]["status"] == "exited"
+
+    returning = check_in(service, phone="010-5555-5555", name="퇴장후순위")
+    service.adjust_points(returning.participant_id, 20, "재입장 게임", "", "op")
+    after_reentry = service.leaderboard("general")
+    assert [row["code"] for row in after_reentry] == [first.display_code]
+    assert after_reentry[0]["points"] == 120
+
+
 def test_public_display_reset_hides_old_visitors_without_deleting_records(
     service: LoungeService,
 ):

@@ -811,16 +811,28 @@ class LoungeService:
         self, session: Session, category: str | None = None
     ) -> list[dict[str, Any]]:
         size = max(3, min(30, int(self.setting("leaderboard_size", "10"))))
-        stmt = select(Participant).where(Participant.status == "active")
+        stmt = select(Participant).options(selectinload(Participant.identity))
         cutoff = self._public_display_cutoff(session)
         if cutoff is not None:
             stmt = stmt.where(Participant.checked_in_at >= cutoff)
         if category is not None:
             stmt = stmt.where(Participant.category == category)
         rows = session.scalars(
-            stmt.order_by(desc(Participant.current_points), Participant.checked_in_at).limit(size)
+            stmt.order_by(desc(Participant.current_points), Participant.checked_in_at)
         ).all()
-        return [self._public_participant(row) for row in rows]
+        leaderboard: list[dict[str, Any]] = []
+        seen_identities: set[object] = set()
+        for row in rows:
+            identity_key: object = (
+                ("identity", row.identity_id) if row.identity_id is not None else ("visit", row.id)
+            )
+            if identity_key in seen_identities:
+                continue
+            seen_identities.add(identity_key)
+            leaderboard.append(self._public_participant(row))
+            if len(leaderboard) == size:
+                break
+        return leaderboard
 
     def _traffic_in_session(self, session: Session) -> list[dict[str, Any]]:
         since = utcnow() - timedelta(hours=8)
