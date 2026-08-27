@@ -355,6 +355,65 @@ def test_phone_is_masked_by_default(service: LoungeService):
     assert revealed["phone"] == "01012345678"
 
 
+def test_undecryptable_phone_uses_last4_without_breaking_operator_views(
+    service: LoungeService,
+):
+    result = check_in(service)
+    with service.sessions.begin() as session:
+        row = session.get(Participant, result.participant_id)
+        assert row is not None
+        row.phone_encrypted = "not-a-valid-fernet-token"
+
+    participant = service.get_participant(result.participant_id)
+    revealed = service.get_participant(result.participant_id, reveal_phone=True)
+    listed = service.search_participants("5678")[0]
+    verified = service.verify_checkout_identity(
+        name="홍길동",
+        phone="010-1234-5678",
+        code=result.display_code,
+    )
+    stats = service.visit_analytics()
+    visit = next(row for row in stats["visits"] if row["code"] == result.display_code)
+
+    assert participant["phone"] == "***-****-5678"
+    assert revealed["phone"] == "***-****-5678"
+    assert listed["phone"] == "***-****-5678"
+    assert verified["phone"] == "***-****-5678"
+    assert participant["phone_decryption_failed"] is True
+    assert stats["undecryptable_phone_count"] == 1
+    assert visit["phone"] == "***-****-5678"
+
+
+def test_encryption_key_change_keeps_permanent_identity_and_entry_count(tmp_path):
+    database_url = f"sqlite:///{tmp_path / 'key-change.db'}"
+    first_config = RuntimeConfig(
+        database_url=database_url,
+        field_encryption_key=Fernet.generate_key().decode("ascii"),
+    )
+    _engine, first_factory = create_db(first_config)
+    first_service = LoungeService(first_factory, first_config)
+    first = check_in(first_service)
+    first_service.check_out(first.participant_id, 0, "", "operator")
+
+    second_config = RuntimeConfig(
+        database_url=database_url,
+        field_encryption_key=Fernet.generate_key().decode("ascii"),
+    )
+    _engine, second_factory = create_db(second_config)
+    second_service = LoungeService(second_factory, second_config)
+    second = check_in(second_service)
+
+    assert second.display_code == first.display_code
+    assert second.entry_count == 2
+    assert second.is_returning is True
+    assert second_service.get_participant(first.participant_id)["phone"] == "***-****-5678"
+    with second_factory() as session:
+        identities = session.query(ParticipantIdentity).all()
+        assert len(identities) == 1
+        assert identities[0].permanent_code == first.display_code
+        assert identities[0].entry_count == 2
+
+
 def test_leaderboard_respects_name_opt_in(service: LoungeService):
     hidden = check_in(service, phone="010-1111-1111", name="홍길동", leaderboard_opt_in=False)
     shown = check_in(service, phone="010-2222-2222", name="김하늘", leaderboard_opt_in=True)
@@ -457,6 +516,7 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     assert stats["exited"] == 1
     assert stats["general"] == 1
     assert stats["vip"] == 1
+    assert stats["undecryptable_phone_count"] == 0
     assert sum(row["count"] for row in stats["hourly"]) == 2
     general_visit = next(visit for visit in stats["visits"] if visit["name"] == "일반방문")
     assert general_visit["age"] == 17

@@ -742,6 +742,11 @@ def _render_analytics_panel(service: LoungeService) -> None:
     @st.fragment(run_every=timedelta(seconds=10))
     def analytics_live() -> None:
         stats = service.visit_analytics()
+        if stats["undecryptable_phone_count"]:
+            st.warning(
+                f'전화번호 {stats["undecryptable_phone_count"]}건은 현재 암호화 키로 '
+                "복호화할 수 없어 저장된 뒤 4자리만 표시합니다."
+            )
         st.markdown(
             metric_cards(
                 [

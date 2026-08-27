@@ -269,6 +269,46 @@ def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
     assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
 
 
+def test_analytics_renders_when_a_stored_phone_cannot_be_decrypted(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'analytics-corrupt-phone.db'}"
+    encryption_key = Fernet.generate_key().decode("ascii")
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", encryption_key)
+    config = RuntimeConfig(
+        database_url=database_url,
+        field_encryption_key=encryption_key,
+        operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
+    )
+    _engine, factory = create_db(config)
+    service = LoungeService(factory, config)
+    participant = service.check_in(
+        name="복호화실패",
+        age=17,
+        phone="010-9876-1234",
+        category="general",
+        privacy_consent=True,
+        leaderboard_opt_in=False,
+    )
+    with factory.begin() as session:
+        row = session.get(Participant, participant.participant_id)
+        assert row is not None
+        row.phone_encrypted = "broken-token"
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
+    app.query_params["view"] = "admin"
+    app.query_params["panel"] = "analytics"
+    app.session_state["operator_authenticated"] = True
+    app.session_state["analytics_authenticated"] = True
+    app.run(timeout=20)
+
+    assert len(app.exception) == 0
+    assert any("전화번호 1건" in warning.value for warning in app.warning)
+    rendered = "\n".join(element.value for element in app.markdown)
+    assert "***-****-1234" in rendered
+    assert "오늘 방문자별 입퇴장 정보" in rendered
+
+
 def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'admin.db'}"
     encryption_key = Fernet.generate_key().decode("ascii")

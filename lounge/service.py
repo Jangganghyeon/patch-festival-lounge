@@ -29,6 +29,7 @@ from .security import (
     encrypt_text,
     identity_digest,
     mask_phone,
+    mask_phone_last4,
     new_display_code,
     new_internal_record_key,
     normalize_name,
@@ -190,6 +191,22 @@ class LoungeService:
                             ParticipantIdentity.identity_hash == fingerprint
                         )
                     )
+                    if identity is None:
+                        known_person = session.scalar(
+                            select(Participant)
+                            .options(selectinload(Participant.identity))
+                            .where(
+                                and_(
+                                    Participant.name == name,
+                                    Participant.phone_hash == digest,
+                                )
+                            )
+                            .order_by(desc(Participant.checked_in_at), desc(Participant.id))
+                            .limit(1)
+                        )
+                        if known_person is not None and known_person.identity is not None:
+                            identity = known_person.identity
+                            identity.identity_hash = fingerprint
                     is_returning = identity is not None
                     if identity is None:
                         known_phone = session.scalar(
@@ -312,15 +329,27 @@ class LoungeService:
 
         raise ValueError("입장 등록을 완료할 수 없습니다.")
 
+    def _phone_for_display(
+        self, row: Participant, *, reveal_phone: bool = False
+    ) -> tuple[str, bool]:
+        try:
+            phone = decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
+        except ValueError:
+            return mask_phone_last4(row.phone_last4), True
+        return (phone if reveal_phone else mask_phone(phone)), False
+
     def _participant_dict(self, row: Participant, reveal_phone: bool = False) -> dict[str, Any]:
-        phone = decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
+        phone, phone_decryption_failed = self._phone_for_display(
+            row, reveal_phone=reveal_phone
+        )
         permanent_code = row.identity.permanent_code if row.identity else row.active_code or ""
         return {
             "id": row.id,
             "code": permanent_code,
             "name": row.name,
             "age": row.age,
-            "phone": phone if reveal_phone else mask_phone(phone),
+            "phone": phone,
+            "phone_decryption_failed": phone_decryption_failed,
             "phone_last4": row.phone_last4,
             "category": row.category,
             "status": row.status,
@@ -700,6 +729,7 @@ class LoungeService:
         hourly_counts: dict[str, int] = {}
         completed_durations: list[int] = []
         visits: list[dict[str, Any]] = []
+        undecryptable_phone_count = 0
         for row in rows:
             checked_in_local = row.checked_in_at.replace(tzinfo=UTC).astimezone(self.local_tz)
             hour = checked_in_local.strftime("%H:00")
@@ -709,14 +739,15 @@ class LoungeService:
             duration_minutes = max(0, int((end - row.checked_in_at).total_seconds() // 60))
             if row.checked_out_at is not None:
                 completed_durations.append(duration_minutes)
+            phone, phone_decryption_failed = self._phone_for_display(row)
+            if phone_decryption_failed:
+                undecryptable_phone_count += 1
             visits.append(
                 {
                     "name": row.name,
                     "code": row.identity.permanent_code if row.identity else row.active_code or "",
                     "age": row.age,
-                    "phone": mask_phone(
-                        decrypt_text(row.phone_encrypted, self.config.field_encryption_key)
-                    ),
+                    "phone": phone,
                     "category": row.category,
                     "status": row.status,
                     "checked_in": self.format_time(row.checked_in_at),
@@ -745,6 +776,7 @@ class LoungeService:
             "vip": vip,
             "general": general,
             "average_duration_minutes": average_duration,
+            "undecryptable_phone_count": undecryptable_phone_count,
             "hourly": [
                 {"hour": hour, "count": count}
                 for hour, count in sorted(hourly_counts.items())

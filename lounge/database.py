@@ -211,6 +211,7 @@ def create_db(config: RuntimeConfig | None = None) -> tuple[Engine, sessionmaker
 
         identities = session.scalars(select(ParticipantIdentity)).all()
         identities_by_hash = {row.identity_hash: row for row in identities}
+        identities_by_id = {row.id: row for row in identities}
         used_codes = {row.permanent_code for row in identities}
         used_keys = {row.legacy_key for row in participants}
         grouped: dict[int, list[Participant]] = {}
@@ -221,7 +222,20 @@ def create_db(config: RuntimeConfig | None = None) -> tuple[Engine, sessionmaker
                 participant.phone_hash,
                 runtime.field_encryption_key,
             )
-            identity = identities_by_hash.get(fingerprint)
+            identity = (
+                identities_by_id.get(participant.identity_id)
+                if participant.identity_id is not None
+                else None
+            )
+            fingerprint_owner = identities_by_hash.get(fingerprint)
+            if identity is not None and fingerprint_owner is not None:
+                identity = fingerprint_owner
+            elif identity is not None and identity.identity_hash != fingerprint:
+                identities_by_hash.pop(identity.identity_hash, None)
+                identity.identity_hash = fingerprint
+                identities_by_hash[fingerprint] = identity
+            elif identity is None:
+                identity = fingerprint_owner
             if identity is None:
                 preferred = preferred_codes[participant.id]
                 code = preferred if preferred and preferred not in used_codes else new_display_code(used_codes)

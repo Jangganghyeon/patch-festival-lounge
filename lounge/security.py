@@ -41,6 +41,13 @@ def mask_phone(value: str) -> str:
     return "***-****-****"
 
 
+def mask_phone_last4(value: str) -> str:
+    last4 = normalize_phone(value)[-4:]
+    if len(last4) != 4:
+        return "***-****-****"
+    return f"***-****-{last4}"
+
+
 def phone_digest(normalized_phone: str) -> str:
     return hashlib.sha256(normalized_phone.encode("utf-8")).hexdigest()
 
