@@ -244,10 +244,42 @@ input, textarea { color: var(--cream) !important; }
 .st-key-check_in_kiosk [data-testid="stNumberInput"] button { min-height: 34px; min-width: 42px; }
 .st-key-check_in_kiosk [data-testid="stRadio"] { padding: .7rem 0 1rem; }
 .st-key-check_in_kiosk [data-testid="stRadio"] label { font-size: 1.15rem; margin-right: 1.4rem; }
-.st-key-check_in_kiosk .stFormSubmitButton { margin-top: 1rem; }
-.st-key-check_in_kiosk .stFormSubmitButton button {
-  min-height: 64px; border-radius: 16px; font-size: 1.12rem; letter-spacing: .04em;
-  box-shadow: 0 14px 34px rgba(168,131,51,.18), inset 0 1px rgba(255,255,255,.35);
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] { margin-top: 1rem; }
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button {
+  min-height: 64px; position: relative; overflow: hidden; isolation: isolate;
+  border: 1px solid rgba(220,191,115,.58) !important; border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% -90%,rgba(244,223,171,.2),transparent 65%),
+    linear-gradient(135deg,#173b31 0%,#0d2922 55%,#132f27 100%) !important;
+  color: var(--cream) !important; font-size: 1.12rem; letter-spacing: .08em;
+  box-shadow: 0 16px 38px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.08);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:before {
+  content: ''; position: absolute; inset: 0; z-index: -1; opacity: 0;
+  background: linear-gradient(110deg,transparent 18%,rgba(244,223,171,.13) 48%,transparent 78%);
+  transform: translateX(-35%); transition: opacity .2s ease, transform .45s ease;
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:hover {
+  transform: translateY(-2px); border-color: rgba(244,223,171,.9) !important;
+  background:
+    radial-gradient(circle at 50% -70%,rgba(244,223,171,.26),transparent 68%),
+    linear-gradient(135deg,#1b473a 0%,#103128 55%,#17382e 100%) !important;
+  color: #fff6d9 !important;
+  box-shadow: 0 20px 46px rgba(0,0,0,.32), 0 0 0 3px rgba(220,191,115,.08),
+    inset 0 1px rgba(255,255,255,.12);
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:hover:before {
+  opacity: 1; transform: translateX(35%);
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:active {
+  transform: translateY(0); box-shadow: 0 10px 24px rgba(0,0,0,.28), inset 0 2px 8px rgba(0,0,0,.18);
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button:focus-visible {
+  outline: 3px solid rgba(244,223,171,.28); outline-offset: 3px;
+}
+.st-key-check_in_kiosk [data-testid="stFormSubmitButton"] button p {
+  color: inherit !important; font-weight: 900; letter-spacing: inherit;
 }
 
 .st-key-board_podium .podium-shell { margin: 1rem 0 1.2rem; }
