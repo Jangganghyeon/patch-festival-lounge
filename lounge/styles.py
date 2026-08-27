@@ -365,7 +365,7 @@ input, textarea { color: var(--cream) !important; }
 .st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"],
 .st-key-checkout_station [data-baseweb="input"] > div,
-.st-key-checkout_station [data-baseweb="base-input"] { height: 104px; min-height: 104px; }
+.st-key-checkout_station [data-baseweb="base-input"] { height: 62px; min-height: 62px; }
 .st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"] > div,
 .st-key-checkout_station [data-baseweb="base-input"] {
@@ -373,10 +373,10 @@ input, textarea { color: var(--cream) !important; }
   background: #261714 !important;
 }
 .st-key-checkout_station input {
-  height:104px !important; min-height:104px; padding:1rem 1.25rem !important;
+  height:60px !important; min-height:60px; padding:.75rem 1rem !important;
   box-sizing:border-box; overflow:visible; line-height:1.2 !important;
-  color:#ffd4c8 !important; font-size:3rem !important; font-weight:900;
-  letter-spacing:.16em; text-align:center; text-transform:uppercase;
+  color:#ffd4c8 !important; font-size:1.35rem !important; font-weight:900;
+  letter-spacing:.1em; text-align:center; text-transform:uppercase;
 }
 .checkout-confirm-card {
   margin: 1rem 0; padding: 1.2rem; text-align:center; border-radius:18px;
@@ -464,9 +464,9 @@ input, textarea { color: var(--cream) !important; }
   .st-key-checkout_station [data-testid="stTextInputRootElement"],
   .st-key-checkout_station [data-baseweb="input"],
   .st-key-checkout_station [data-baseweb="input"] > div,
-  .st-key-checkout_station [data-baseweb="base-input"] { height:84px; min-height:84px; }
+  .st-key-checkout_station [data-baseweb="base-input"] { height:58px; min-height:58px; }
   .st-key-checkout_station input {
-    height:84px !important; min-height:84px; font-size:2.1rem !important;
+    height:56px !important; min-height:56px; font-size:1.15rem !important;
   }
   .visit-row { grid-template-columns:1fr auto; gap:.55rem; }
   .visit-time { grid-column:1/2; }
