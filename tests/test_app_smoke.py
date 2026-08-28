@@ -275,8 +275,26 @@ def test_checkout_requires_name_phone_and_id_before_confirmation(tmp_path, monke
 
 
 def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'analytics.db'}")
-    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+    database_url = f"sqlite:///{tmp_path / 'analytics.db'}"
+    encryption_key = Fernet.generate_key().decode("ascii")
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("FIELD_ENCRYPTION_KEY", encryption_key)
+    config = RuntimeConfig(
+        database_url=database_url,
+        field_encryption_key=encryption_key,
+        operator_password="test-operator-password",
+        analytics_password="test-analytics-password",
+    )
+    _engine, factory = create_db(config)
+    service = LoungeService(factory, config)
+    service.check_in(
+        name="방문기록손님",
+        age=17,
+        phone="010-2468-1357",
+        category="general",
+        privacy_consent=True,
+        leaderboard_opt_in=False,
+    )
 
     app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py")
     app.query_params["view"] = "analytics"
@@ -296,6 +314,8 @@ def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
     rendered = "\n".join(element.value for element in app.markdown)
     assert "시간대별 방문자 수" in rendered
     assert "오늘 방문자별 입퇴장 정보" in rendered
+    assert "01024681357" in rendered
+    assert "010-****-1357" not in rendered
     assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
 
 
@@ -364,3 +384,4 @@ def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, m
     rendered = "\n".join(element.value for element in app.markdown)
     assert "전산 칩 관리" in rendered
     assert len(app.text_input) == 0
+
