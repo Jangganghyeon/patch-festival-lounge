@@ -715,14 +715,11 @@ class LoungeService:
     def visit_analytics(self, *, reveal_phone: bool = False) -> dict[str, Any]:
         now = utcnow()
         now_local = now.replace(tzinfo=UTC).astimezone(self.local_tz)
-        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
 
         with self.sessions() as session:
             rows = session.scalars(
                 select(Participant)
                 .options(selectinload(Participant.identity))
-                .where(Participant.checked_in_at >= start_utc)
                 .order_by(desc(Participant.checked_in_at))
             ).all()
 
@@ -752,8 +749,8 @@ class LoungeService:
                     "phone": phone,
                     "category": row.category,
                     "status": row.status,
-                    "checked_in": self.format_time(row.checked_in_at),
-                    "checked_out": self.format_time(row.checked_out_at),
+                    "checked_in": self.format_time(row.checked_in_at, include_date=True),
+                    "checked_out": self.format_time(row.checked_out_at, include_date=True),
                     "duration_minutes": duration_minutes,
                     "visit_number": row.visit_number,
                     "entry_count": row.identity.entry_count if row.identity else row.visit_number,
