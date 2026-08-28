@@ -179,13 +179,39 @@ p, label, .stCaption { color: #d9e2de; }
 
 .rank-row {
   display: grid; grid-template-columns: 48px minmax(0,1fr) 110px; align-items: center;
-  padding: .78rem .25rem; border-bottom: 1px solid rgba(220,191,115,.12);
+  position: relative; isolation: isolate; padding: .78rem .25rem;
+  border-bottom: 1px solid rgba(220,191,115,.12); border-radius: 12px;
 }
+.rank-position { display:flex; flex-direction:column; align-items:flex-start; gap:.12rem; }
 .rank-number { color: var(--gold); font: 700 1.15rem 'Playfair Display', serif; }
+.rank-change {
+  display:inline-flex; align-items:center; min-width:2.15rem; padding:.12rem .28rem;
+  border-radius:999px; font-size:.6rem; font-weight:900; line-height:1.2; letter-spacing:.02em;
+}
+.rank-change-rising { color:#aaf0cf; background:rgba(55,184,122,.18); }
+.rank-change-falling { color:#efb3a7; background:rgba(200,95,95,.16); }
+.rank-row.rank-moving {
+  z-index:3; will-change:transform,background-color,box-shadow;
+  animation:rankReorder 1.05s cubic-bezier(.2,.78,.22,1) var(--rank-delay,0ms) both;
+}
+.rank-row.rank-rising { --rank-flash:rgba(55,184,122,.18); --rank-glow:rgba(91,227,159,.22); }
+.rank-row.rank-falling { --rank-flash:rgba(200,95,95,.13); --rank-glow:rgba(232,114,91,.16); }
+.rank-row.rank-moving:before {
+  content:''; position:absolute; inset:3px 0; z-index:-1; border-radius:11px;
+  background:linear-gradient(90deg,var(--rank-flash),transparent 82%);
+  animation:rankTrail 1.05s ease-out var(--rank-delay,0ms) both;
+}
 .rank-name { color: var(--cream); font-weight: 700; }
 .rank-code { color: var(--muted); font-size: .78rem; }
 .rank-points { color: var(--gold-soft); text-align: right; font-weight: 800; }
 .live-dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: #5be39f; box-shadow: 0 0 0 5px rgba(91,227,159,.1); margin-right: .55rem; }
+
+@keyframes rankReorder {
+  0% { transform:translateY(var(--rank-shift)); box-shadow:0 0 0 rgba(0,0,0,0); }
+  58% { box-shadow:0 12px 34px var(--rank-glow); }
+  100% { transform:translateY(0); box-shadow:0 0 0 rgba(0,0,0,0); }
+}
+@keyframes rankTrail { 0% { opacity:0; } 22% { opacity:1; } 100% { opacity:0; } }
 
 .person-strip {
   border: 1px solid var(--line); border-radius: 16px; padding: 1rem 1.1rem;
@@ -483,6 +509,7 @@ input, textarea { color: var(--cream) !important; }
 @media (prefers-reduced-motion: reduce) {
   .podium-shell:before, .podium-stage-glow, .podium-sparkle, .podium-place,
   .podium-medal, .winner-crown, .podium-step:after { animation: none !important; }
+  .rank-row.rank-moving, .rank-row.rank-moving:before { animation-duration:.45s !important; }
 }
 </style>
 """
