@@ -312,8 +312,8 @@ def test_analytics_requires_a_separate_password(tmp_path, monkeypatch):
         timeout=20
     )
     rendered = "\n".join(element.value for element in app.markdown)
-    assert "시간대별 방문자 수" in rendered
-    assert "오늘 방문자별 입퇴장 정보" in rendered
+    assert "누적 시간대별 방문자 수" in rendered
+    assert "전체 방문자별 입퇴장 정보" in rendered
     assert "01024681357" in rendered
     assert "010-****-1357" not in rendered
     assert any(button.label == "← 운영자 메뉴로 돌아가기" for button in app.button)
@@ -356,7 +356,7 @@ def test_analytics_renders_when_a_stored_phone_cannot_be_decrypted(tmp_path, mon
     assert any("전화번호 1건" in warning.value for warning in app.warning)
     rendered = "\n".join(element.value for element in app.markdown)
     assert "***-****-1234" in rendered
-    assert "오늘 방문자별 입퇴장 정보" in rendered
+    assert "전체 방문자별 입퇴장 정보" in rendered
 
 
 def test_admin_chip_panel_renders_without_duplicate_streamlit_inputs(tmp_path, monkeypatch):
