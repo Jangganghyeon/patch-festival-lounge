@@ -712,7 +712,7 @@ class LoungeService:
                 "traffic": self._traffic_in_session(session),
             }
 
-    def visit_analytics(self) -> dict[str, Any]:
+    def visit_analytics(self, *, reveal_phone: bool = False) -> dict[str, Any]:
         now = utcnow()
         now_local = now.replace(tzinfo=UTC).astimezone(self.local_tz)
         start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -739,7 +739,9 @@ class LoungeService:
             duration_minutes = max(0, int((end - row.checked_in_at).total_seconds() // 60))
             if row.checked_out_at is not None:
                 completed_durations.append(duration_minutes)
-            phone, phone_decryption_failed = self._phone_for_display(row)
+            phone, phone_decryption_failed = self._phone_for_display(
+                row, reveal_phone=reveal_phone
+            )
             if phone_decryption_failed:
                 undecryptable_phone_count += 1
             visits.append(
@@ -1011,3 +1013,4 @@ class LoungeService:
             return "-"
         local = value.replace(tzinfo=UTC).astimezone(self.local_tz)
         return local.strftime("%m/%d %H:%M" if include_date else "%H:%M")
+
