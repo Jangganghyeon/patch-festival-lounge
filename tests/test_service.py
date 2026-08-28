@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from cryptography.fernet import Fernet
@@ -14,7 +14,7 @@ from lounge.database import (
     PointTransaction,
     create_db,
 )
-from lounge.service import LoungeService
+from lounge.service import LoungeService, utcnow
 
 
 @pytest.fixture()
@@ -564,4 +564,28 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     assert general_visit["visit_number"] == 1
     assert general_visit["entry_count"] == 1
     assert all("points" not in visit for visit in stats["visits"])
+
+
+def test_historical_records_remain_visible_without_manual_reset(service: LoungeService):
+    participant = check_in(
+        service,
+        phone="010-7777-0001",
+        name="과거방문",
+        leaderboard_opt_in=True,
+    )
+    service.adjust_points(participant.participant_id, 500, "과거 게임", "", "operator")
+    historical_check_in = utcnow() - timedelta(days=7)
+    with service.sessions.begin() as session:
+        row = session.get(Participant, participant.participant_id)
+        assert row is not None
+        row.checked_in_at = historical_check_in
+
+    stats = service.visit_analytics()
+
+    assert stats["total"] == 1
+    assert stats["visits"][0]["name"] == "과거방문"
+    assert stats["visits"][0]["checked_in"] != "-"
+    assert service.dashboard()["total"] == 1
+    assert service.search_participants("과거방문")[0]["id"] == participant.participant_id
+    assert service.leaderboard("general")[0]["code"] == participant.display_code
 
