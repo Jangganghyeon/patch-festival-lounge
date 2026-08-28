@@ -432,16 +432,20 @@ input, textarea { color: var(--cream) !important; }
 .st-key-operator_gate [data-baseweb="input"] > div { min-height: 58px; border-radius: 14px; }
 .st-key-operator_gate input { min-height: 56px; font-size: 1.1rem !important; text-align: center; }
 
+.block-container:has(.checkout-hero) { padding-top:1.35rem; }
 .checkout-hero {
-  margin: 1.4rem 0 1.2rem; padding: 1.8rem 2rem; border-radius: 24px;
+  margin:.55rem 0 .45rem; padding:1.15rem 1.5rem; border-radius:20px;
   border: 1px solid rgba(232,114,91,.42);
   background: radial-gradient(circle at 90% 0%,rgba(232,114,91,.18),transparent 45%),
     linear-gradient(145deg,rgba(59,29,25,.96),rgba(26,15,14,.98));
   box-shadow: 0 24px 65px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.04);
 }
-.checkout-kicker { color:#ff9b83; font-size:.72rem; font-weight:900; letter-spacing:.2em; }
-.checkout-title { color:#fff0eb; font-size:clamp(2.2rem,6vw,4.2rem); font-weight:900; margin:.3rem 0; }
-.checkout-copy { color:#d7aaa0; font-size:1rem; }
+.checkout-kicker { color:#ff9b83; font-size:.68rem; font-weight:900; letter-spacing:.2em; }
+.checkout-title {
+  color:#fff0eb; font-size:clamp(1.9rem,4.5vw,3.35rem); line-height:1.08;
+  font-weight:900; margin:.18rem 0 .22rem;
+}
+.checkout-copy { color:#d7aaa0; font-size:.92rem; line-height:1.55; }
 .st-key-checkout_station {
   max-width: 720px; margin: .5rem auto; padding: 1rem;
   border: 1px solid rgba(232,114,91,.34); border-radius: 22px;
@@ -552,7 +556,8 @@ input, textarea { color: var(--cream) !important; }
   .st-key-kiosk_guest_card, .st-key-kiosk_access_card { min-height: auto; padding: 1.15rem .55rem; }
   .st-key-kiosk_guest_card:after { display: none; }
   .st-key-check_in_kiosk input { font-size: 1.15rem !important; }
-  .checkout-hero { padding:1.35rem; }
+  .block-container:has(.checkout-hero) { padding-top:1rem; }
+  .checkout-hero { margin:.55rem 0 .4rem; padding:1rem 1.15rem; }
   .st-key-checkout_station .react-aria-TextField,
   .st-key-checkout_station [data-testid="stTextInputRootElement"],
   .st-key-checkout_station [data-baseweb="input"],
