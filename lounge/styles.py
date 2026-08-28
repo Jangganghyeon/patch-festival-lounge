@@ -447,7 +447,13 @@ input, textarea { color: var(--cream) !important; }
   border: 1px solid rgba(232,114,91,.34); border-radius: 22px;
   background: rgba(47,25,22,.9); box-shadow: 0 20px 55px rgba(0,0,0,.22);
 }
-.st-key-checkout_station [data-testid="stForm"] { padding: .9rem; }
+.st-key-checkout_station [data-testid="stForm"] { padding: .9rem .9rem 1rem; }
+.st-key-checkout_station [data-testid="stForm"] > [data-testid="stVerticalBlock"] {
+  gap:.78rem;
+}
+.st-key-checkout_station [data-testid="stForm"] [data-testid="stHorizontalBlock"] {
+  gap:.9rem;
+}
 .st-key-checkout_station .react-aria-TextField,
 .st-key-checkout_station [data-testid="stTextInputRootElement"],
 .st-key-checkout_station [data-baseweb="input"],
@@ -554,6 +560,12 @@ input, textarea { color: var(--cream) !important; }
   .st-key-checkout_station [data-baseweb="base-input"] { height:40px; min-height:40px; }
   .st-key-checkout_station input {
     height:56px !important; min-height:56px; font-size:1.15rem !important;
+  }
+  .st-key-checkout_station [data-testid="stForm"] [data-testid="stHorizontalBlock"] {
+    flex-direction:column; gap:.65rem;
+  }
+  .st-key-checkout_station [data-testid="stForm"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    width:100% !important; flex:1 1 100% !important;
   }
   .visit-row { grid-template-columns:1fr auto; gap:.55rem; }
   .visit-time { grid-column:1/2; }
