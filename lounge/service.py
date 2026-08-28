@@ -818,9 +818,9 @@ class LoungeService:
         if category is not None:
             stmt = stmt.where(Participant.category == category)
         rows = session.scalars(
-            stmt.order_by(desc(Participant.current_points), Participant.checked_in_at)
+            stmt.order_by(desc(Participant.checked_in_at), desc(Participant.id))
         ).all()
-        leaderboard: list[dict[str, Any]] = []
+        latest_visits: list[Participant] = []
         seen_identities: set[object] = set()
         for row in rows:
             identity_key: object = (
@@ -829,9 +829,40 @@ class LoungeService:
             if identity_key in seen_identities:
                 continue
             seen_identities.add(identity_key)
-            leaderboard.append(self._public_participant(row))
-            if len(leaderboard) == size:
-                break
+            latest_visits.append(row)
+
+        returning_ids = [row.id for row in latest_visits if row.visit_number > 1]
+        deltas_by_participant: dict[int, int] = {}
+        if returning_ids:
+            delta_rows = session.execute(
+                select(
+                    PointTransaction.participant_id,
+                    func.coalesce(func.sum(PointTransaction.delta), 0),
+                )
+                .where(PointTransaction.participant_id.in_(returning_ids))
+                .group_by(PointTransaction.participant_id)
+            ).all()
+            deltas_by_participant = {
+                int(participant_id): int(delta) for participant_id, delta in delta_rows
+            }
+
+        scored_visits: list[tuple[Participant, int]] = []
+        for row in latest_visits:
+            points = row.current_points
+            if row.visit_number > 1:
+                start_key = (
+                    "vip_start_points" if row.category == "vip" else "general_start_points"
+                )
+                starting_points = int(self.setting(start_key, DEFAULT_START_POINTS))
+                points = max(0, starting_points + deltas_by_participant.get(row.id, 0))
+            scored_visits.append((row, points))
+
+        scored_visits.sort(key=lambda item: (-item[1], item[0].checked_in_at, item[0].id))
+        leaderboard: list[dict[str, Any]] = []
+        for row, points in scored_visits[:size]:
+            public_row = self._public_participant(row)
+            public_row["points"] = points
+            leaderboard.append(public_row)
         return leaderboard
 
     def _traffic_in_session(self, session: Session) -> list[dict[str, Any]]:
