@@ -373,7 +373,11 @@ def test_undecryptable_phone_uses_last4_without_breaking_operator_views(
         code=result.display_code,
     )
     stats = service.visit_analytics()
+    revealed_stats = service.visit_analytics(reveal_phone=True)
     visit = next(row for row in stats["visits"] if row["code"] == result.display_code)
+    revealed_visit = next(
+        row for row in revealed_stats["visits"] if row["code"] == result.display_code
+    )
 
     assert participant["phone"] == "***-****-5678"
     assert revealed["phone"] == "***-****-5678"
@@ -382,6 +386,7 @@ def test_undecryptable_phone_uses_last4_without_breaking_operator_views(
     assert participant["phone_decryption_failed"] is True
     assert stats["undecryptable_phone_count"] == 1
     assert visit["phone"] == "***-****-5678"
+    assert revealed_visit["phone"] == "***-****-5678"
 
 
 def test_encryption_key_change_keeps_permanent_identity_and_entry_count(tmp_path):
@@ -540,6 +545,7 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     service.check_out(general.participant_id, 0, "", "checkout_station")
 
     stats = service.visit_analytics()
+    revealed_stats = service.visit_analytics(reveal_phone=True)
     assert stats["total"] == 2
     assert stats["active"] == 1
     assert stats["exited"] == 1
@@ -548,9 +554,14 @@ def test_visit_analytics_tracks_attendance_without_point_history(service: Lounge
     assert stats["undecryptable_phone_count"] == 0
     assert sum(row["count"] for row in stats["hourly"]) == 2
     general_visit = next(visit for visit in stats["visits"] if visit["name"] == "일반방문")
+    revealed_general_visit = next(
+        visit for visit in revealed_stats["visits"] if visit["name"] == "일반방문"
+    )
     assert general_visit["age"] == 17
     assert general_visit["phone"] == "010-****-5555"
+    assert revealed_general_visit["phone"] == "01055555555"
     assert general_visit["code"] == general.display_code
     assert general_visit["visit_number"] == 1
     assert general_visit["entry_count"] == 1
     assert all("points" not in visit for visit in stats["visits"])
+
