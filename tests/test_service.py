@@ -434,7 +434,7 @@ def test_vip_and_general_leaderboards_are_separate(service: LoungeService):
     assert [row["code"] for row in service.leaderboard("vip")] == [vip.display_code]
 
 
-def test_checked_out_participant_remains_on_leaderboard_without_duplicates(
+def test_reentry_resets_only_leaderboard_score_without_duplicates(
     service: LoungeService,
 ):
     first = check_in(service, phone="010-5555-5555", name="퇴장후순위")
@@ -447,10 +447,20 @@ def test_checked_out_participant_remains_on_leaderboard_without_duplicates(
     assert after_checkout[0]["status"] == "exited"
 
     returning = check_in(service, phone="010-5555-5555", name="퇴장후순위")
-    service.adjust_points(returning.participant_id, 20, "재입장 게임", "", "op")
     after_reentry = service.leaderboard("general")
     assert [row["code"] for row in after_reentry] == [first.display_code]
-    assert after_reentry[0]["points"] == 120
+    assert after_reentry[0]["points"] == 25_000
+    assert after_reentry[0]["status"] == "active"
+
+    service.adjust_points(returning.participant_id, 20, "재입장 게임", "", "op")
+    after_reentry_game = service.leaderboard("general")
+    assert [row["code"] for row in after_reentry_game] == [first.display_code]
+    assert after_reentry_game[0]["points"] == 25_020
+
+    stored_returning_visit = service.get_participant(returning.participant_id)
+    assert stored_returning_visit["points"] == 120
+    stored_visits = service.search_participants("퇴장후순위")
+    assert [row["points"] for row in stored_visits] == [120, 100]
 
 
 def test_public_display_reset_hides_old_visitors_without_deleting_records(
