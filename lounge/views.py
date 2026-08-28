@@ -169,18 +169,21 @@ def render_checkout(service: LoungeService) -> None:
 
     with st.container(key="checkout_station"):
         with st.form("checkout_identity_form"):
-            name = st.text_input(
-                "이름",
-                max_chars=40,
-                placeholder="홍길동",
-                key="checkout_name_input",
-            )
-            phone = st.text_input(
-                "전화번호",
-                max_chars=15,
-                placeholder="010-1234-5678",
-                key="checkout_phone_input",
-            )
+            name_column, phone_column = st.columns(2, gap="medium")
+            with name_column:
+                name = st.text_input(
+                    "이름",
+                    max_chars=40,
+                    placeholder="홍길동",
+                    key="checkout_name_input",
+                )
+            with phone_column:
+                phone = st.text_input(
+                    "전화번호",
+                    max_chars=15,
+                    placeholder="010-1234-5678",
+                    key="checkout_phone_input",
+                )
             code = st.text_input(
                 "참가자 ID",
                 max_chars=4,
