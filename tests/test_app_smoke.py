@@ -9,6 +9,7 @@ from streamlit.testing.v1 import AppTest
 from lounge.config import RuntimeConfig
 from lounge.database import Participant, create_db
 from lounge.service import LoungeService
+from lounge.views import leaderboard_html
 
 
 @pytest.fixture(autouse=True)
@@ -134,6 +135,26 @@ def test_board_renders_podium_without_traffic_widgets(tmp_path, monkeypatch):
     assert "YQNRV2" not in rendered
     assert "입장 흐름" not in rendered
     assert "최근 입장" not in rendered
+
+
+def test_leaderboard_rows_animate_from_their_previous_rank():
+    rows = [
+        {"name": "상승 참가자", "code": "UP", "points": 900},
+        {"name": "하락 참가자", "code": "DN", "points": 800},
+    ]
+
+    rendered = leaderboard_html(
+        rows,
+        start_rank=4,
+        previous_ranks={"UP": 7, "DN": 4},
+    )
+
+    assert 'class="rank-row rank-moving rank-rising"' in rendered
+    assert 'class="rank-change rank-change-rising">▲3</span>' in rendered
+    assert 'style="--rank-shift:13.05rem;' in rendered
+    assert 'class="rank-row rank-moving rank-falling"' in rendered
+    assert 'class="rank-change rank-change-falling">▼1</span>' in rendered
+    assert 'style="--rank-shift:-4.35rem;' in rendered
 
 
 def test_home_shows_the_general_board_without_a_vip_card(tmp_path, monkeypatch):
