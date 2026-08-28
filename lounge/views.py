@@ -352,15 +352,38 @@ def metric_cards(items: list[tuple[str, object]]) -> str:
     return f"<div class='metric-grid'>{blocks}</div>"
 
 
-def leaderboard_html(rows: list[dict], start_rank: int = 1) -> str:
+def leaderboard_html(
+    rows: list[dict],
+    start_rank: int = 1,
+    previous_ranks: dict[str, int] | None = None,
+) -> str:
     if not rows:
         return "<div class='panel-card' style='color:#a5b6ae'>4위 이하 참가자가 없습니다.</div>"
+    previous_ranks = previous_ranks or {}
     body = []
     for index, row in enumerate(rows, start_rank):
+        code = str(row["code"])
+        previous_rank = previous_ranks.get(code)
+        movement = previous_rank - index if previous_rank is not None else 0
+        movement_class = ""
+        movement_badge = ""
+        movement_style = ""
+        if movement:
+            direction = "rising" if movement > 0 else "falling"
+            arrow = "▲" if movement > 0 else "▼"
+            movement_class = f" rank-moving rank-{direction}"
+            movement_badge = (
+                f'<span class="rank-change rank-change-{direction}">{arrow}{abs(movement)}</span>'
+            )
+            movement_style = (
+                f' style="--rank-shift:{movement * 4.35:.2f}rem;'
+                f'--rank-delay:{min(index - start_rank, 6) * 35}ms"'
+            )
         body.append(
-            f'<div class="rank-row"><div class="rank-number">{index:02d}</div>'
+            f'<div class="rank-row{movement_class}"{movement_style}>'
+            f'<div class="rank-position"><div class="rank-number">{index:02d}</div>{movement_badge}</div>'
             f'<div><div class="rank-name">{esc(row["name"])}</div>'
-            f'<div class="rank-code">ID&nbsp; {esc(row["code"])}</div></div>'
+            f'<div class="rank-code">ID&nbsp; {esc(code)}</div></div>'
             f'<div class="rank-points">{row["points"]:,} P</div></div>'
         )
     return "<div class='panel-card'>" + "".join(body) + "</div>"
@@ -425,6 +448,11 @@ def render_board(service: LoungeService) -> None:
     @st.fragment(run_every=timedelta(seconds=2))
     def live_board() -> None:
         leaderboard = service.leaderboard(category)
+        rank_state_key = f"board_previous_ranks_{category}"
+        previous_ranks = dict(st.session_state.get(rank_state_key, {}))
+        current_ranks = {
+            str(row["code"]): index for index, row in enumerate(leaderboard, start=1)
+        }
         podium_column, ranking_column = st.columns([1.35, 0.65], gap="large", vertical_alignment="top")
         with podium_column:
             with st.container(key="board_podium"):
@@ -437,9 +465,14 @@ def render_board(service: LoungeService) -> None:
                 st.markdown(
                     f"<div class='ranking-heading'><span>{esc(group_label)} PLAYERS</span>"
                     "<strong>4위부터 순위</strong></div>"
-                    + leaderboard_html(leaderboard[3:], start_rank=4),
+                    + leaderboard_html(
+                        leaderboard[3:],
+                        start_rank=4,
+                        previous_ranks=previous_ranks,
+                    ),
                     unsafe_allow_html=True,
                 )
+        st.session_state[rank_state_key] = current_ranks
 
     live_board()
     st.link_button("처음 화면으로", "?view=home")
