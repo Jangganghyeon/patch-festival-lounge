@@ -106,6 +106,11 @@ p, label, .stCaption { color: #d9e2de; }
   background: linear-gradient(105deg,transparent 40%,rgba(255,235,166,.09) 48%,rgba(255,255,255,.16) 50%,rgba(255,235,166,.09) 52%,transparent 60%);
   transform: translateX(-55%); animation: podiumShine 6s ease-in-out infinite;
 }
+.podium-shell:after {
+  content:''; position:absolute; inset:-18% -45%; z-index:1; pointer-events:none;
+  background:linear-gradient(108deg,transparent 43%,rgba(255,240,177,.08) 48%,rgba(255,255,232,.16) 50%,rgba(255,240,177,.08) 52%,transparent 57%);
+  transform:translateX(-58%); animation:podiumLightSweep 7.2s ease-in-out infinite;
+}
 .podium-stage-glow {
   position: absolute; width: 44%; height: 190px; left: 28%; top: 8px; z-index: -1;
   border-radius: 50%; background: rgba(255,213,88,.14); filter: blur(42px);
@@ -118,23 +123,44 @@ p, label, .stCaption { color: #d9e2de; }
 .podium-title span { color: #fff0a8; text-shadow: 0 0 18px rgba(255,220,109,.5); }
 .podium-sparkle {
   position: absolute; color: #ffe595; z-index: 3; pointer-events: none;
-  text-shadow: 0 0 15px rgba(255,226,133,.9); animation: sparkle 2.4s ease-in-out infinite;
+  opacity:.12; text-shadow:0 0 7px #fff9d2,0 0 20px rgba(255,217,91,.9);
+  transform-origin:center; will-change:transform,opacity,filter;
+  animation:stageTwinkle var(--sparkle-speed,2.8s) cubic-bezier(.4,0,.2,1) infinite;
 }
-.sparkle-1 { left: 8%; top: 16%; font-size: 1.25rem; }
-.sparkle-2 { right: 10%; top: 10%; font-size: 1.6rem; animation-delay: -.8s; }
-.sparkle-3 { left: 25%; top: 35%; font-size: .95rem; animation-delay: -1.5s; }
-.sparkle-4 { right: 25%; top: 32%; font-size: 1.1rem; animation-delay: -.35s; }
+.sparkle-1 { left:8%; top:16%; font-size:1.25rem; --sparkle-speed:2.6s; animation-delay:-.35s; }
+.sparkle-2 { right:10%; top:10%; font-size:1.6rem; --sparkle-speed:3.1s; animation-delay:-1.6s; }
+.sparkle-3 { left:25%; top:35%; font-size:.95rem; --sparkle-speed:2.35s; animation-delay:-1.15s; }
+.sparkle-4 { right:25%; top:32%; font-size:1.1rem; --sparkle-speed:2.85s; animation-delay:-2.25s; }
 .podium-grid {
   display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem;
   align-items: end; max-width: 900px; margin: 0 auto; position: relative; z-index: 2;
 }
-.podium-place { min-width: 0; text-align: center; animation: podiumFloat 3.4s ease-in-out infinite; }
+.podium-place {
+  min-width:0; position:relative; text-align:center;
+  animation:podiumFloat 3.4s ease-in-out infinite;
+}
+.podium-place:before, .podium-place:after {
+  position:absolute; z-index:4; pointer-events:none; color:#fff2a5; opacity:0;
+  text-shadow:0 0 6px #fffde9,0 0 16px rgba(255,214,72,.92);
+  will-change:transform,opacity,filter; animation:placeTwinkle 3.35s ease-in-out infinite;
+}
+.podium-place:before { content:'✦'; left:12%; top:18%; font-size:.8rem; }
+.podium-place:after { content:'✧'; right:10%; top:34%; font-size:1.05rem; animation-delay:-1.7s; }
 .podium-1 { animation-delay: -.7s; }
 .podium-3 { animation-delay: -1.4s; }
+.podium-1:before { left:9%; top:5%; font-size:1rem; animation-delay:-.55s; }
+.podium-1:after { right:8%; top:24%; font-size:1.2rem; animation-delay:-2.2s; }
+.podium-2:before { animation-delay:-1.25s; }
+.podium-2:after { animation-delay:-2.85s; }
+.podium-3:before { animation-delay:-2.05s; }
+.podium-3:after { animation-delay:-.8s; }
 .podium-medal {
   font-size: clamp(2rem, 4vw, 3.2rem); filter: drop-shadow(0 8px 16px rgba(0,0,0,.28));
   animation: medalGlow 2.6s ease-in-out infinite;
 }
+.podium-1 .podium-medal { animation-delay:-.45s; }
+.podium-2 .podium-medal { animation-delay:-1.35s; }
+.podium-3 .podium-medal { animation-delay:-2.1s; }
 .winner-crown {
   height: 42px; color: #ffe486; font: 700 clamp(2.4rem,5vw,4rem)/1 'Playfair Display',serif;
   text-shadow: 0 0 14px rgba(255,223,112,.85),0 0 32px rgba(255,197,56,.45);
@@ -170,11 +196,45 @@ p, label, .stCaption { color: #d9e2de; }
 .podium-1 .podium-points { text-shadow: 0 0 24px rgba(220,191,115,.35); }
 
 @keyframes podiumShine { 0%,28% { transform:translateX(-55%); } 70%,100% { transform:translateX(55%); } }
+@keyframes podiumLightSweep { 0%,22% { opacity:0; transform:translateX(-58%); } 48% { opacity:1; } 74%,100% { opacity:0; transform:translateX(58%); } }
 @keyframes stageGlow { 0%,100% { opacity:.55; transform:scale(.92); } 50% { opacity:1; transform:scale(1.08); } }
-@keyframes sparkle { 0%,100% { opacity:.2; transform:scale(.65) rotate(0); } 50% { opacity:1; transform:scale(1.3) rotate(35deg); } }
+@keyframes stageTwinkle {
+  0%,12%,100% { opacity:.12; transform:scale(.52) rotate(-9deg); filter:brightness(.75); }
+  30% { opacity:1; transform:scale(1.52) rotate(20deg); filter:brightness(1.45); }
+  46% { opacity:.28; transform:scale(.78) rotate(30deg); filter:brightness(.9); }
+  68% { opacity:.88; transform:scale(1.22) rotate(47deg); filter:brightness(1.28); }
+  82% { opacity:.16; transform:scale(.6) rotate(58deg); filter:brightness(.8); }
+}
+@keyframes placeTwinkle {
+  0%,18%,100% { opacity:0; transform:translateY(4px) scale(.35) rotate(-12deg); filter:blur(.35px); }
+  34% { opacity:.95; transform:translateY(0) scale(1.32) rotate(13deg); filter:blur(0); }
+  48% { opacity:.22; transform:translateY(-2px) scale(.72) rotate(25deg); }
+  66% { opacity:.78; transform:translateY(-4px) scale(1.08) rotate(38deg); }
+  80% { opacity:0; transform:translateY(-7px) scale(.48) rotate(52deg); }
+}
+@keyframes gentleTwinkle {
+  0%,100% { opacity:.12; filter:brightness(.78) drop-shadow(0 0 2px rgba(255,229,149,.3)); }
+  45% { opacity:.95; filter:brightness(1.45) drop-shadow(0 0 10px rgba(255,229,149,.92)); }
+  68% { opacity:.32; filter:brightness(.95) drop-shadow(0 0 4px rgba(255,229,149,.45)); }
+}
+@keyframes gentleStageGlow { 0%,100% { opacity:.45; } 50% { opacity:.92; } }
+@keyframes gentleMedalGlow {
+  0%,100% { filter:drop-shadow(0 8px 16px rgba(0,0,0,.28)); }
+  50% { filter:drop-shadow(0 0 9px rgba(255,249,199,.82)) drop-shadow(0 0 20px rgba(255,203,63,.42)); }
+}
+@keyframes gentleCrownGlow {
+  0%,100% { text-shadow:0 0 14px rgba(255,223,112,.65),0 0 28px rgba(255,197,56,.3); }
+  50% { text-shadow:0 0 8px #fffbdc,0 0 23px rgba(255,223,112,.95),0 0 38px rgba(255,183,26,.52); }
+}
 @keyframes podiumFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
-@keyframes medalGlow { 0%,100% { filter:drop-shadow(0 8px 16px rgba(0,0,0,.28)); } 50% { filter:drop-shadow(0 0 18px rgba(255,224,128,.55)); } }
-@keyframes crownHover { 0%,100% { transform:translateY(0) rotate(-2deg); } 50% { transform:translateY(-6px) rotate(2deg); } }
+@keyframes medalGlow {
+  0%,100% { transform:scale(1); filter:drop-shadow(0 8px 16px rgba(0,0,0,.28)); }
+  46% { transform:scale(1.065); filter:drop-shadow(0 0 10px rgba(255,249,199,.88)) drop-shadow(0 0 23px rgba(255,203,63,.5)); }
+}
+@keyframes crownHover {
+  0%,100% { transform:translateY(0) rotate(-2deg); text-shadow:0 0 14px rgba(255,223,112,.7),0 0 28px rgba(255,197,56,.35); }
+  50% { transform:translateY(-6px) rotate(2deg); text-shadow:0 0 9px #fffbdc,0 0 24px rgba(255,223,112,.95),0 0 42px rgba(255,183,26,.58); }
+}
 @keyframes stepShimmer { 0%,42% { transform:translateX(-120%); } 72%,100% { transform:translateX(120%); } }
 
 .rank-row {
@@ -507,8 +567,20 @@ input, textarea { color: var(--cream) !important; }
   .st-key-board_ranking .panel-card { max-height: 420px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .podium-shell:before, .podium-stage-glow, .podium-sparkle, .podium-place,
-  .podium-medal, .winner-crown, .podium-step:after { animation: none !important; }
+  .podium-shell:before, .podium-shell:after, .podium-stage-glow, .podium-sparkle,
+  .podium-place, .podium-place:before, .podium-place:after, .podium-medal,
+  .winner-crown, .podium-step:after { animation: none !important; }
+  .podium-stage-glow { animation:gentleStageGlow 5.2s ease-in-out infinite !important; }
+  .podium-sparkle {
+    animation:gentleTwinkle var(--sparkle-speed,3.2s) ease-in-out infinite !important;
+  }
+  .podium-place:before { animation:gentleTwinkle 4.1s ease-in-out -.6s infinite !important; }
+  .podium-place:after { animation:gentleTwinkle 4.7s ease-in-out -2.4s infinite !important; }
+  .podium-medal { animation:gentleMedalGlow 4s ease-in-out infinite !important; }
+  .podium-1 .podium-medal { animation-delay:-.4s !important; }
+  .podium-2 .podium-medal { animation-delay:-1.55s !important; }
+  .podium-3 .podium-medal { animation-delay:-2.7s !important; }
+  .winner-crown { animation:gentleCrownGlow 3.8s ease-in-out infinite !important; }
   .rank-row.rank-moving, .rank-row.rank-moving:before { animation-duration:.45s !important; }
 }
 </style>
