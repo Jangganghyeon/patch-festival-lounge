@@ -604,7 +604,7 @@ def render_admin(service: LoungeService) -> None:
             (
                 "02",
                 "영업 분석",
-                "오늘의 방문·체류·입퇴장 흐름을 한눈에 확인합니다.",
+                "전체 기간의 방문·체류·입퇴장 흐름을 누적으로 확인합니다.",
                 "영업 분석 열기",
                 "analytics",
             ),
@@ -750,7 +750,7 @@ def _minutes_label(minutes: int) -> str:
 
 def _hourly_visits_html(rows: list[dict]) -> str:
     if not rows:
-        return '<div class="analytics-empty">아직 오늘 입장 기록이 없습니다.</div>'
+        return '<div class="analytics-empty">아직 입장 기록이 없습니다.</div>'
     maximum = max(row["count"] for row in rows) or 1
     bars = "".join(
         f'<div class="hour-row"><div class="hour-label">{esc(row["hour"])}</div>'
@@ -782,7 +782,7 @@ def _category_split_html(general: int, vip: int) -> str:
 
 def _visit_details_html(visits: list[dict]) -> str:
     if not visits:
-        return '<div class="analytics-empty">오늘 방문자 정보가 없습니다.</div>'
+        return '<div class="analytics-empty">방문자 정보가 없습니다.</div>'
     rows = []
     for visit in visits:
         category = "VIP" if visit["category"] == "vip" else "일반"
@@ -807,7 +807,7 @@ def _render_analytics_panel(service: LoungeService) -> None:
 
     st.markdown("## 영업 분석")
     st.caption(
-        "오늘의 방문·입퇴장·체류 정보를 집계합니다. "
+        "전체 기간의 방문·입퇴장·체류 정보를 누적으로 집계합니다. "
         "전화번호 원문은 인증된 이 방문 기록에서만 표시됩니다."
     )
 
@@ -822,7 +822,7 @@ def _render_analytics_panel(service: LoungeService) -> None:
         st.markdown(
             metric_cards(
                 [
-                    ("오늘 방문", stats["total"]),
+                    ("누적 방문", stats["total"]),
                     ("현재 입장", stats["active"]),
                     ("퇴장 완료", stats["exited"]),
                     ("평균 체류시간", _minutes_label(stats["average_duration_minutes"])),
@@ -832,7 +832,7 @@ def _render_analytics_panel(service: LoungeService) -> None:
         )
         left, right = st.columns([1.2, 0.8], gap="large")
         with left:
-            st.markdown("### 시간대별 방문자 수")
+            st.markdown("### 누적 시간대별 방문자 수")
             st.markdown(_hourly_visits_html(stats["hourly"]), unsafe_allow_html=True)
         with right:
             st.markdown("### VIP·일반 방문 비율")
@@ -840,8 +840,8 @@ def _render_analytics_panel(service: LoungeService) -> None:
                 _category_split_html(stats["general"], stats["vip"]),
                 unsafe_allow_html=True,
             )
-        st.markdown("### 오늘 방문자별 입퇴장 정보")
-        st.caption("평균 체류시간은 퇴장이 완료된 방문만 기준으로 계산됩니다.")
+        st.markdown("### 전체 방문자별 입퇴장 정보")
+        st.caption("누적 평균 체류시간은 퇴장이 완료된 방문만 기준으로 계산됩니다.")
         st.markdown(_visit_details_html(stats["visits"]), unsafe_allow_html=True)
 
     analytics_live()
