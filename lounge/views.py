@@ -806,11 +806,14 @@ def _render_analytics_panel(service: LoungeService) -> None:
         return
 
     st.markdown("## 영업 분석")
-    st.caption("오늘의 방문·입퇴장·체류 정보를 집계합니다. 전화번호는 일부만 마스킹해 표시합니다.")
+    st.caption(
+        "오늘의 방문·입퇴장·체류 정보를 집계합니다. "
+        "전화번호 원문은 인증된 이 방문 기록에서만 표시됩니다."
+    )
 
     @st.fragment(run_every=timedelta(seconds=10))
     def analytics_live() -> None:
-        stats = service.visit_analytics()
+        stats = service.visit_analytics(reveal_phone=True)
         if stats["undecryptable_phone_count"]:
             st.warning(
                 f'전화번호 {stats["undecryptable_phone_count"]}건은 현재 암호화 키로 '
@@ -919,3 +922,4 @@ def _participant_list(service: LoungeService, operator: str) -> None:
                 st.success("퇴장 기록이 복구되었습니다.")
             except ValueError as exc:
                 st.error(str(exc))
+
